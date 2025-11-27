@@ -29,20 +29,48 @@ def load_json_document(path: str | Path) -> Dict[str, Any]:
 
 
 def extract_text_from_pdf(path_or_stream: str | Path | BytesIO) -> str:
-    """Extract text from PDF using pdfplumber or PyPDF2."""
+    """Extract text from PDF using pdfplumber or PyPDF2, with OCR fallback."""
+    text = ""
     try:
         import pdfplumber  # type: ignore
 
         with pdfplumber.open(path_or_stream) as pdf:
-            return "\n".join(page.extract_text() or "" for page in pdf.pages)
+            text = "\n".join(page.extract_text() or "" for page in pdf.pages)
     except ImportError:
+        text = ""
+    except Exception:
+        text = ""
+
+    if not text or len(text.strip()) < 50:
+        # Fallback: try PyPDF2 text extraction
         try:
             from PyPDF2 import PdfReader  # type: ignore
 
             reader = PdfReader(path_or_stream)
-            return "\n".join(page.extract_text() or "" for page in reader.pages)
-        except ImportError as exc:
-            raise ImportError("Install pdfplumber or pypdf/PyPDF2 for PDF extraction.") from exc
+            text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        except Exception:
+            text = ""
+
+    if not text or len(text.strip()) < 50:
+        # Last resort: OCR each page if pdf2image + pytesseract are available
+        try:
+            from pdf2image import convert_from_path, convert_from_bytes  # type: ignore
+            from PIL import Image  # type: ignore
+            import pytesseract  # type: ignore
+
+            if isinstance(path_or_stream, (str, Path)):
+                images = convert_from_path(str(path_or_stream), dpi=200)
+            else:
+                # BytesIO or file-like
+                raw = path_or_stream.read() if hasattr(path_or_stream, "read") else path_or_stream
+                images = convert_from_bytes(raw, dpi=200)
+            ocr_texts = [pytesseract.image_to_string(img) for img in images]
+            text = "\n".join(ocr_texts)
+        except Exception:
+            # If OCR dependencies not available, keep whatever text we have (possibly empty)
+            pass
+
+    return text
 
 
 def extract_structured_fields(text: str) -> Dict[str, Any]:

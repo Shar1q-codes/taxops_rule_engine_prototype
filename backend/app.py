@@ -107,6 +107,7 @@ def health() -> Dict[str, str]:
 async def audit_document_endpoint(
     file: UploadFile = File(...),
     doc_type: Optional[str] = Form(None),
+    tax_year: Optional[int] = Form(None),
     user: Dict[str, Any] = Depends(verify_firebase_token),
 ) -> Dict[str, Any]:
     """Accept a PDF/image/JSON upload, run the auditor pipeline, and return findings."""
@@ -128,6 +129,8 @@ async def audit_document_endpoint(
 
     if doc_type:
         doc["doc_type"] = doc_type
+    if tax_year:
+        doc["tax_year"] = int(tax_year)
 
     try:
         result = audit_document(
