@@ -1,13 +1,13 @@
-2023:
-  limits:
-    social_security_wage_base: 160200
- rates:
-    social_security_rate: 0.062
-    medicare_rate: 0.0145
-
 2020:
   limits:
     social_security_wage_base: 137700
+  rates:
+    social_security_rate: 0.062
+    medicare_rate: 0.0145
+
+2023:
+  limits:
+    social_security_wage_base: 160200
   rates:
     social_security_rate: 0.062
     medicare_rate: 0.0145
