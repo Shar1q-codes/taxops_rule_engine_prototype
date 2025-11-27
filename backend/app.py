@@ -129,22 +129,26 @@ async def audit_document_endpoint(
     if doc_type:
         doc["doc_type"] = doc_type
 
-    result = audit_document(
-        doc,
-        chunk_index_path=settings["chunk_index_path"],
-        base_model=settings["base_model"],
-        adapter_dir=settings["adapter_dir"],
-        merge_strategy=settings["merge_strategy"],
-        device=settings["device"],
-        use_4bit=settings["use_4bit"],
-        max_new_tokens=settings["max_new_tokens"],
-        temperature=settings["temperature"],
-        top_p=settings["top_p"],
-        do_sample=settings["do_sample"],
-        skip_llm=settings["skip_llm"],
-        llm_endpoint=settings["llm_endpoint"],
-        http_timeout=settings["http_timeout"],
-    )
+    try:
+        result = audit_document(
+            doc,
+            chunk_index_path=settings["chunk_index_path"],
+            base_model=settings["base_model"],
+            adapter_dir=settings["adapter_dir"],
+            merge_strategy=settings["merge_strategy"],
+            device=settings["device"],
+            use_4bit=settings["use_4bit"],
+            max_new_tokens=settings["max_new_tokens"],
+            temperature=settings["temperature"],
+            top_p=settings["top_p"],
+            do_sample=settings["do_sample"],
+            skip_llm=settings["skip_llm"],
+            llm_endpoint=settings["llm_endpoint"],
+            http_timeout=settings["http_timeout"],
+        )
+    except ValueError as exc:
+        # Gracefully surface validation issues (e.g., unsupported tax year) as 400 to the client.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     elapsed_ms = int((time.time() - start) * 1000)
     payload = {
