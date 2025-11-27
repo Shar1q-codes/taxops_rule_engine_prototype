@@ -39,6 +39,8 @@ def get_settings() -> Dict[str, Any]:
     if llm_endpoint:
         # If a remote LLM is provided we can allow LLM usage unless explicitly disabled.
         skip_llm = os.getenv("AUDITOR_SKIP_LLM", "false").lower() == "true"
+    allowed_raw = os.getenv("ALLOWED_ORIGINS", "*")
+    allowed_list = [o.strip() for o in allowed_raw.split(",") if o.strip()]
     return {
         "chunk_index_path": os.getenv("CHUNK_INDEX_PATH", str(base_dir / "sample_data" / "chunk_index.jsonl")),
         "base_model": os.getenv("AUDITOR_BASE_MODEL", "mistralai/Mistral-7B-v0.1"),
@@ -53,7 +55,8 @@ def get_settings() -> Dict[str, Any]:
         "skip_llm": skip_llm,
         "llm_endpoint": llm_endpoint,
         "http_timeout": int(os.getenv("AUDITOR_HTTP_TIMEOUT", "60")),
-        "allowed_origins": [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",") if o.strip()],
+        "allowed_origins": allowed_list,
+        "allow_origin_regex": os.getenv("ALLOWED_ORIGIN_REGEX", None),
         "auth_bypass": os.getenv("AUTH_BYPASS", "false").lower() == "true",
         "firebase_project_id": os.getenv("FIREBASE_PROJECT_ID"),
     }
@@ -70,6 +73,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings["allowed_origins"] or ["*"],
+    allow_origin_regex=settings["allow_origin_regex"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
