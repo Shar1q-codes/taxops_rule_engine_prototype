@@ -1,0 +1,8 @@
+[build]
+  base = "frontend"
+  command = "npm install && npm run build"
+  publish = ".next"
+
+[build.environment]
+  NEXT_TELEMETRY_DISABLED = "1"
+  NETLIFY_NEXT_PLUGIN_SKIP = "false"

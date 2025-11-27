@@ -1,0 +1,31 @@
+{
+  "doc_id": "w2-ss-mismatch-2024",
+  "doc_type": "W2",
+  "tax_year": 2024,
+  "taxpayer": {
+    "name": "John Doe",
+    "ssn": "123-45-6789"
+  },
+  "employer": {
+    "name": "ACME Inc.",
+    "ein": "12-3456789",
+    "state": "CA"
+  },
+  "amounts": {
+    "wages": 85000,
+    "federal_withholding": 12000,
+    "state_withholding": 3000,
+    "social_security_wages": 75000,
+    "social_security_tax": 4650.0,
+    "medicare_wages": 85000,
+    "medicare_tax": 1232.5
+  },
+  "flags": {
+    "ocr_quality": 0.95
+  },
+  "meta": {
+    "source_files": [
+      "w2_ss_wages_mismatch.pdf"
+    ]
+  }
+}

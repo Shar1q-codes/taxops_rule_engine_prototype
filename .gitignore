@@ -1,0 +1,42 @@
+# Environments and IDE
+.venv/
+.env
+.env.local
+.env.*.local
+.vscode/
+.idea/
+
+# Node / Next.js build artifacts
+node_modules/
+.next/
+out/
+pnpm-lock.yaml
+yarn.lock
+
+# Python caches and test artifacts
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Logs
+*.log
+
+# Large/model/checkpoint assets
+*.zip
+*.tar.gz
+*.tgz
+*.pt
+*.pth
+*.bin
+*.ckpt
+outputs/
+
+# Generated data (keep small sample_data)
+datasets/
+training_prep.zip
+
+# OS noise
+.DS_Store
+Thumbs.db

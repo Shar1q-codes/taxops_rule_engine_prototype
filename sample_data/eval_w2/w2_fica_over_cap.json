@@ -1,0 +1,31 @@
+{
+  "doc_id": "w2-fica-over-cap-2024",
+  "doc_type": "W2",
+  "tax_year": 2024,
+  "taxpayer": {
+    "name": "High Earner",
+    "ssn": "123-45-6789"
+  },
+  "employer": {
+    "name": "BigCo",
+    "ein": "98-7654321",
+    "state": "CA"
+  },
+  "amounts": {
+    "wages": 200000,
+    "federal_withholding": 40000,
+    "state_withholding": 5000,
+    "social_security_wages": 200000,
+    "social_security_tax": 12400.0,
+    "medicare_wages": 200000,
+    "medicare_tax": 2900.0
+  },
+  "flags": {
+    "ocr_quality": 0.95
+  },
+  "meta": {
+    "source_files": [
+      "w2_fica_over_cap.pdf"
+    ]
+  }
+}
