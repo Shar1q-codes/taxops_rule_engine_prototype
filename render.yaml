@@ -1,14 +1,13 @@
 services:
   - type: web
-    name: corallo-taxops-backend
-    env: python
+    name: corallo-taxops-backend-docker
+    env: docker
     plan: free
-    region: oregon
-    buildCommand: pip install -r backend/requirements.txt
-    startCommand: PYTHONPATH=. cd backend && uvicorn app:app --host 0.0.0.0 --port $PORT
+    dockerfilePath: backend/Dockerfile
+    autoDeploy: true
     envVars:
-      - key: PYTHONPATH
-        value: .
+      - key: PYTHONUNBUFFERED
+        value: "1"
       - key: CHUNK_INDEX_PATH
         value: sample_data/chunk_index.jsonl
       - key: AUDITOR_SKIP_LLM
