@@ -110,6 +110,15 @@ def extract_structured_fields(text: str) -> Dict[str, Any]:
     return fields
 
 
+def extract_box_value(text: str, label: str) -> float:
+    """Extract numeric value following a W-2 box label."""
+    pattern = rf"{re.escape(label)}\s*[:\-]?\s*\$?([\d,]+(?:\.\d+)?)"
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    if not match:
+        return 0.0
+    return safe_float(match.group(1), 0.0)
+
+
 def extract_clause_indicators(text: str) -> List[str]:
     """Detect simple clause indicators (e.g., withholding, exemption)."""
     indicators = []
@@ -164,7 +173,7 @@ def _blank_w2(doc_id: str) -> Dict[str, Any]:
         },
         "state": {"state_code": "", "state_wages": 0.0, "state_tax_withheld": 0.0},
         "tax_year": None,
-        "ocr_quality": 0.5,
+        "ocr_quality": 1.0,
     }
 
 
@@ -182,8 +191,80 @@ def _apply_extracted_fields(doc: Dict[str, Any], extracted: Dict[str, Any]) -> N
 
 
 def _assign_ocr_quality(text: str, used_ocr: bool) -> float:
-    confidence = 0.9 if text and len(text.strip()) > 80 and not used_ocr else 0.5
-    return 1.0 if confidence >= 0.85 else 0.5
+    return 0.7 if used_ocr else 1.0
+
+
+def _extract_wage_boxes(text: str) -> Dict[str, float]:
+    mapping = {
+        "Box 1": ("wages", "wages_tips_other"),
+        "Box 2": ("wages", "federal_income_tax_withheld"),
+        "Box 3": ("wages", "social_security_wages"),
+        "Box 4": ("wages", "social_security_tax_withheld"),
+        "Box 5": ("wages", "medicare_wages"),
+        "Box 6": ("wages", "medicare_tax_withheld"),
+        "Box 16": ("state", "state_wages"),
+        "Box 17": ("state", "state_tax_withheld"),
+    }
+    results: Dict[str, float] = {}
+    for label, (section, key) in mapping.items():
+        val = extract_box_value(text, label)
+        if val > 0:
+            results[f"{section}.{key}"] = val
+    return results
+
+
+def _populate_wages_from_text(doc: Dict[str, Any], text: str) -> None:
+    values = _extract_wage_boxes(text)
+    for dotted, val in values.items():
+        section, key = dotted.split(".", 1)
+        if section not in doc or not isinstance(doc[section], dict):
+            continue
+        doc[section][key] = val
+
+
+def _wages_missing(doc: Dict[str, Any]) -> bool:
+    wages = doc.get("wages") or {}
+    required_keys = [
+        "wages_tips_other",
+        "federal_income_tax_withheld",
+        "social_security_wages",
+        "social_security_tax_withheld",
+        "medicare_wages",
+        "medicare_tax_withheld",
+    ]
+    return any(safe_float(wages.get(k, 0.0), 0.0) <= 0.0 for k in required_keys)
+
+
+def _log_missing_fields(doc: Dict[str, Any]) -> None:
+    checks = [
+        ("wages.wages_tips_other", doc.get("wages", {}).get("wages_tips_other")),
+        ("wages.federal_income_tax_withheld", doc.get("wages", {}).get("federal_income_tax_withheld")),
+        ("wages.social_security_wages", doc.get("wages", {}).get("social_security_wages")),
+        ("wages.social_security_tax_withheld", doc.get("wages", {}).get("social_security_tax_withheld")),
+        ("wages.medicare_wages", doc.get("wages", {}).get("medicare_wages")),
+        ("wages.medicare_tax_withheld", doc.get("wages", {}).get("medicare_tax_withheld")),
+        ("state.state_wages", doc.get("state", {}).get("state_wages")),
+        ("state.state_tax_withheld", doc.get("state", {}).get("state_tax_withheld")),
+    ]
+    for field, value in checks:
+        if safe_float(value, 0.0) <= 0.0:
+            logger.warning("Missing field: %s", field)
+
+
+def _merge_docs(primary: Dict[str, Any], secondary: Dict[str, Any]) -> Dict[str, Any]:
+    """Fill missing/empty values in primary with values from secondary."""
+    merged = primary
+    for section in ("employee", "employer", "wages", "state"):
+        if section not in merged or not isinstance(merged[section], dict):
+            merged[section] = {}
+        if section in secondary and isinstance(secondary[section], dict):
+            for key, val in secondary[section].items():
+                current = merged[section].get(key)
+                if (current in ("", None) or safe_float(current, 0.0) == 0.0) and val not in ("", None):
+                    merged[section][key] = val
+    if merged.get("tax_year") in (None, "", 0) and secondary.get("tax_year"):
+        merged["tax_year"] = secondary["tax_year"]
+    return merged
 
 
 def parse_w2_from_text(doc_id: str, text: str, used_ocr: bool) -> Dict[str, Any]:
@@ -191,8 +272,27 @@ def parse_w2_from_text(doc_id: str, text: str, used_ocr: bool) -> Dict[str, Any]
     doc = _blank_w2(doc_id)
     extracted = extract_structured_fields(text)
     _apply_extracted_fields(doc, extracted)
+    _populate_wages_from_text(doc, text)
     doc["ocr_quality"] = _assign_ocr_quality(text, used_ocr)
     return doc
+
+
+def _force_pdf_ocr(path_or_stream: str | Path | BytesIO) -> str:
+    """Run OCR on a PDF source regardless of prior extraction attempts."""
+    try:
+        from pdf2image import convert_from_path, convert_from_bytes  # type: ignore
+        import pytesseract  # type: ignore
+
+        if isinstance(path_or_stream, (str, Path)):
+            images = convert_from_path(str(path_or_stream), dpi=200)
+        else:
+            raw = path_or_stream.read() if hasattr(path_or_stream, "read") else path_or_stream
+            images = convert_from_bytes(raw, dpi=200)
+        ocr_texts = [pytesseract.image_to_string(img) for img in images]
+        return "\n".join(ocr_texts)
+    except Exception as exc:
+        logger.warning("Forced OCR failed: %s", exc)
+        return ""
 
 
 def parse_document(path: str | Path) -> Dict[str, Any]:
@@ -205,6 +305,12 @@ def parse_document(path: str | Path) -> Dict[str, Any]:
         text, used_ocr = extract_text_from_pdf(p)
         doc_id = p.stem or uuid.uuid4().hex
         doc = parse_w2_from_text(doc_id, text, used_ocr)
+        if _wages_missing(doc) and not used_ocr:
+            ocr_text = _force_pdf_ocr(p)
+            if ocr_text:
+                ocr_doc = parse_w2_from_text(doc_id, ocr_text, used_ocr=True)
+                doc = _merge_docs(ocr_doc, doc)
+        _log_missing_fields(doc)
         doc["meta"] = {"source_file": p.name}
         return doc
 
@@ -212,6 +318,7 @@ def parse_document(path: str | Path) -> Dict[str, Any]:
         text = extract_text_from_image(p)
         doc_id = p.stem or uuid.uuid4().hex
         doc = parse_w2_from_text(doc_id, text, used_ocr=True)
+        _log_missing_fields(doc)
         doc["meta"] = {"source_file": p.name}
         return doc
 
@@ -234,6 +341,12 @@ def parse_document_bytes(filename: str, data: bytes) -> Dict[str, Any]:
         text, used_ocr = extract_text_from_pdf(BytesIO(data))
         doc_id = Path(filename).stem or uuid.uuid4().hex
         doc = parse_w2_from_text(doc_id, text, used_ocr)
+        if _wages_missing(doc) and not used_ocr:
+            ocr_text = _force_pdf_ocr(BytesIO(data))
+            if ocr_text:
+                ocr_doc = parse_w2_from_text(doc_id, ocr_text, used_ocr=True)
+                doc = _merge_docs(ocr_doc, doc)
+        _log_missing_fields(doc)
         doc["meta"] = {"source_file": filename}
         return doc
 
@@ -241,6 +354,7 @@ def parse_document_bytes(filename: str, data: bytes) -> Dict[str, Any]:
         text = extract_text_from_image_bytes(data)
         doc_id = Path(filename).stem or uuid.uuid4().hex
         doc = parse_w2_from_text(doc_id, text, used_ocr=True)
+        _log_missing_fields(doc)
         doc["meta"] = {"source_file": filename}
         return doc
 
