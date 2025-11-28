@@ -299,19 +299,30 @@ def _assign_ocr_quality(text: str, used_ocr: bool) -> float:
 
 
 def _extract_wage_boxes(text: str) -> Dict[str, float]:
-    mapping = {
-        "Box 1": ("wages", "wages_tips_other"),
-        "Box 2": ("wages", "federal_income_tax_withheld"),
-        "Box 3": ("wages", "social_security_wages"),
-        "Box 4": ("wages", "social_security_tax_withheld"),
-        "Box 5": ("wages", "medicare_wages"),
-        "Box 6": ("wages", "medicare_tax_withheld"),
-        "Box 16": ("state", "state_wages"),
-        "Box 17": ("state", "state_tax_withheld"),
+    label_sets = {
+        ("Box 1", "Box1", "1", "1."): ("wages", "wages_tips_other"),
+        ("Box 2", "Box2", "2", "2."): ("wages", "federal_income_tax_withheld"),
+        ("Box 3", "Box3", "3", "3."): ("wages", "social_security_wages"),
+        ("Box 4", "Box4", "4", "4."): ("wages", "social_security_tax_withheld"),
+        ("Box 5", "Box5", "5", "5."): ("wages", "medicare_wages"),
+        ("Box 6", "Box6", "6", "6."): ("wages", "medicare_tax_withheld"),
+        ("Box 16", "Box16", "16", "16."): ("state", "state_wages"),
+        ("Box 17", "Box17", "17", "17."): ("state", "state_tax_withheld"),
     }
     results: Dict[str, float] = {}
-    for label, (section, key) in mapping.items():
-        val = extract_box_value(text, label)
+    for labels, (section, key) in label_sets.items():
+        val = 0.0
+        for label in labels:
+            val = extract_box_value(text, label)
+            if val > 0:
+                break
+        if val <= 0:
+            # Try line-based pattern like "1 Wages, tips, other compensation 50,000.00"
+            box_num = re.sub(r"\D", "", labels[0]) or labels[0]
+            pattern = rf"^{box_num}\s+[A-Za-z, \-/]+?\s+\$?([\d,]+(?:\.\d+)?)"
+            match = re.search(pattern, text, flags=re.IGNORECASE | re.MULTILINE)
+            if match:
+                val = safe_float(match.group(1), 0.0)
         if val > 0:
             results[f"{section}.{key}"] = val
     return results
