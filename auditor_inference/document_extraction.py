@@ -11,6 +11,7 @@ Dependencies for image OCR (install as needed):
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import re
@@ -18,6 +19,7 @@ import uuid
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+from PyPDF2 import PdfReader
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +112,108 @@ def extract_structured_fields(text: str) -> Dict[str, Any]:
     return fields
 
 
+def extract_acroform_fields(pdf_bytes: bytes) -> Dict[str, Any]:
+    """
+    Attempt to extract AcroForm field names and values from an interactive / fillable W-2 PDF.
+    Returns a flat dict mapping field_name -> string_value.
+    """
+    try:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+    except Exception as exc:
+        logger.warning("Failed to read PDF for AcroForm extraction: %s", exc)
+        return {}
+
+    fields: Dict[str, Any] = {}
+    try:
+        raw_fields = reader.get_fields()
+        if not raw_fields:
+            return {}
+        for name, field in raw_fields.items():
+            value = field.get("/V")
+            if value is None:
+                continue
+            if isinstance(value, str):
+                fields[name] = value.strip()
+            else:
+                fields[name] = str(value).strip()
+    except Exception as exc:
+        logger.warning("Error while extracting AcroForm fields: %s", exc)
+        return {}
+
+    return fields
+
+
+def map_w2_fields_from_form(form_fields: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Map common W-2 interactive/form field names into our normalized W-2 structure.
+    This is a best-effort mapping for typical interactive W-2 PDFs (e.g., ADP, payroll vendors).
+    """
+
+    def get_first(*keys: str, default: str | None = None) -> str | None:
+        for k in keys:
+            if k in form_fields and str(form_fields[k]).strip():
+                return str(form_fields[k]).strip()
+        return default
+
+    ssn = get_first("EmployeeSSN", "EmpSSN", "SSN", "f1_8", "SSN_1")
+    ein = get_first("EmployerEIN", "EIN", "EmpEIN", "f1_2", "EIN_1")
+
+    def parse_float(val: Any) -> float:
+        if val is None:
+            return 0.0
+        s = str(val).replace("$", "").replace(",", "").strip()
+        if not s:
+            return 0.0
+        try:
+            return float(s)
+        except ValueError:
+            return 0.0
+
+    wages_box1 = parse_float(get_first("WagesTipsOther", "Wages_Tips", "Box1", "W2_Box1"))
+    fit_box2 = parse_float(get_first("FedIncomeTaxWithheld", "Box2", "W2_Box2"))
+    ss_wages_b3 = parse_float(get_first("SocialSecurityWages", "Box3", "W2_Box3"))
+    ss_tax_b4 = parse_float(get_first("SocialSecurityTax", "Box4", "W2_Box4"))
+    med_wages_b5 = parse_float(get_first("MedicareWages", "Box5", "W2_Box5"))
+    med_tax_b6 = parse_float(get_first("MedicareTax", "Box6", "W2_Box6"))
+    state_wages = parse_float(get_first("StateWages", "Box16", "W2_Box16"))
+    state_tax = parse_float(get_first("StateIncomeTax", "Box17", "W2_Box17"))
+
+    tax_year_str = get_first("TaxYear", "Year", "W2_Year")
+    tax_year = None
+    if tax_year_str:
+        try:
+            tax_year = int(str(tax_year_str).strip())
+        except ValueError:
+            tax_year = None
+
+    logger.info(
+        "W-2 form-field mapping applied: wages_box1=%s, fit=%s, ss_wages=%s",
+        wages_box1,
+        fit_box2,
+        ss_wages_b3,
+    )
+
+    return {
+        "employee": {
+            "ssn": ssn,
+        },
+        "employer": {
+            "ein": ein,
+        },
+        "wages": {
+            "wages_tips_other": wages_box1,
+            "federal_income_tax_withheld": fit_box2,
+            "social_security_wages": ss_wages_b3,
+            "social_security_tax_withheld": ss_tax_b4,
+            "medicare_wages": med_wages_b5,
+            "medicare_tax_withheld": med_tax_b6,
+        },
+        "state": {
+            "state_wages": state_wages,
+            "state_tax_withheld": state_tax,
+        },
+        "tax_year": tax_year,
+    }
 def extract_box_value(text: str, label: str) -> float:
     """Extract numeric value following a W-2 box label."""
     pattern = rf"{re.escape(label)}\s*[:\-]?\s*\$?([\d,]+(?:\.\d+)?)"
@@ -251,6 +355,24 @@ def _log_missing_fields(doc: Dict[str, Any]) -> None:
             logger.warning("Missing field: %s", field)
 
 
+def _merge_form_mapping(doc: Dict[str, Any], mapped: Dict[str, Any]) -> None:
+    if not mapped:
+        return
+    doc["employee"]["ssn"] = doc["employee"].get("ssn") or mapped.get("employee", {}).get("ssn") or ""
+    doc["employer"]["ein"] = doc["employer"].get("ein") or mapped.get("employer", {}).get("ein") or ""
+    for key, val in (mapped.get("wages") or {}).items():
+        if doc["wages"].get(key) in (None, 0, 0.0, "") and val not in (None, 0, 0.0, ""):
+            doc["wages"][key] = val
+    for key, val in (mapped.get("state") or {}).items():
+        if doc["state"].get(key) in (None, 0, 0.0, "") and val not in (None, 0, 0.0, ""):
+            doc["state"][key] = val
+    if (doc.get("tax_year") in (None, 0, "")) and mapped.get("tax_year"):
+        doc["tax_year"] = mapped["tax_year"]
+    # If form provided numeric wages, treat as high confidence.
+    if any(v > 0 for v in (mapped.get("wages") or {}).values()):
+        doc["ocr_quality"] = 1.0
+
+
 def _merge_docs(primary: Dict[str, Any], secondary: Dict[str, Any]) -> Dict[str, Any]:
     """Fill missing/empty values in primary with values from secondary."""
     merged = primary
@@ -302,9 +424,15 @@ def parse_document(path: str | Path) -> Dict[str, Any]:
         return load_json_document(p)
 
     if p.suffix.lower() == ".pdf":
+        pdf_bytes = p.read_bytes()
         text, used_ocr = extract_text_from_pdf(p)
         doc_id = p.stem or uuid.uuid4().hex
         doc = parse_w2_from_text(doc_id, text, used_ocr)
+        form_fields = extract_acroform_fields(pdf_bytes)
+        if form_fields:
+            logger.info("AcroForm fields detected: %d", len(form_fields))
+            mapped = map_w2_fields_from_form(form_fields)
+            _merge_form_mapping(doc, mapped)
         if _wages_missing(doc) and not used_ocr:
             ocr_text = _force_pdf_ocr(p)
             if ocr_text:
@@ -341,6 +469,11 @@ def parse_document_bytes(filename: str, data: bytes) -> Dict[str, Any]:
         text, used_ocr = extract_text_from_pdf(BytesIO(data))
         doc_id = Path(filename).stem or uuid.uuid4().hex
         doc = parse_w2_from_text(doc_id, text, used_ocr)
+        form_fields = extract_acroform_fields(data)
+        if form_fields:
+            logger.info("AcroForm fields detected: %d", len(form_fields))
+            mapped = map_w2_fields_from_form(form_fields)
+            _merge_form_mapping(doc, mapped)
         if _wages_missing(doc) and not used_ocr:
             ocr_text = _force_pdf_ocr(BytesIO(data))
             if ocr_text:
