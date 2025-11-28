@@ -7,6 +7,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
 
+from engine import rule_engine
 from training_prep.formatter import format_auditor_prompt
 
 
@@ -207,6 +208,7 @@ def main() -> None:
 
     # 1. Load document
     doc = load_document(args.doc_file)
+    rule_results = rule_engine.evaluate(doc, form_type=doc.get("doc_type"), tax_year=doc.get("tax_year"))
 
     # 2. Build training-style prompt
     instruction = format_auditor_prompt(doc)
@@ -255,10 +257,30 @@ def main() -> None:
     except Exception as exc:  # noqa: BLE001
         print("Failed to parse JSON array from completion:")
         print(repr(exc))
-        return
+        findings = []
 
-    print("=== PARSED FINDINGS ===")
-    print(json.dumps(findings, indent=2, ensure_ascii=False))
+    merged = []
+    if isinstance(findings, list):
+        merged.extend(findings)
+    merged.extend(rule_results)
+
+    final_payload = {
+        "rule_issues": rule_results,
+        "llm_findings": findings,
+        "merged_findings": merged,
+        "metadata": {
+            "doc_id": doc.get("doc_id"),
+            "doc_type": doc.get("doc_type"),
+            "tax_year": doc.get("tax_year"),
+            "prompt_preview": prompt[:500],
+        },
+    }
+
+    print("=== RULE ENGINE FINDINGS ===")
+    print(json.dumps(rule_results, indent=2, ensure_ascii=False))
+
+    print("=== FINAL PAYLOAD ===")
+    print(json.dumps(final_payload, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":

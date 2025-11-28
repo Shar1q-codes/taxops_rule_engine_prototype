@@ -1,0 +1,246 @@
+- id: W2_SSN_FORMAT
+  form_types: ["W2"]
+  name: Taxpayer SSN format invalid
+  severity: error
+  description: "Taxpayer SSN is missing or not in ###-##-#### format."
+  condition:
+    type: expression
+    expr: "not is_valid_ssn(taxpayer_ssn)"
+  references:
+    - source: IRS W-2 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-w-2
+  fields: ["taxpayer.ssn"]
+
+- id: W2_EIN_FORMAT
+  form_types: ["W2"]
+  name: Employer EIN format invalid
+  severity: error
+  description: "Employer EIN is missing or not in XX-XXXXXXX format."
+  condition:
+    type: expression
+    expr: "not is_valid_ein(employer_ein)"
+  references:
+    - source: IRS W-2 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-w-2
+  fields: ["employer.ein"]
+
+- id: W2_WAGES_OVER_BASE_MISSING_SS_WAGES
+  form_types: ["W2"]
+  name: Social Security wages inconsistent with base
+  severity: warning
+  description: "Wages exceed the Social Security wage base but Social Security wages do not reach the cap."
+  condition:
+    type: expression
+    expr: "wages > year_params.get('ss_wage_base', 0) and social_security_wages < min(wages, year_params.get('ss_wage_base', 0))"
+  references:
+    - source: IRS Pub. 15
+      url: https://www.irs.gov/publications/p15
+  fields: ["amounts.wages", "amounts.social_security_wages"]
+
+- id: W2_SOCSEC_TAX_MATH
+  form_types: ["W2"]
+  name: Social Security tax does not match base x rate
+  severity: error
+  description: "Social Security tax {social_security_tax} should equal min(Social Security wages, wage base) x rate."
+  condition:
+    type: expression
+    expr: "not within_tolerance(social_security_tax, min(social_security_wages if social_security_wages else wages, year_params.get('ss_wage_base', 0)) * year_params.get('ss_rate', 0), year_params.get('tolerance', 1.0))"
+  references:
+    - source: IRS Pub. 15
+      url: https://www.irs.gov/publications/p15
+  fields: ["amounts.social_security_wages", "amounts.social_security_tax"]
+
+- id: W2_MEDICARE_TAX_MATH
+  form_types: ["W2"]
+  name: Medicare tax does not match wages x rate
+  severity: error
+  description: "Medicare tax {medicare_tax} should equal Medicare wages x base rate plus Additional Medicare above the threshold."
+  condition:
+    type: expression
+    expr: "not within_tolerance(medicare_tax, medicare_wages * year_params.get('medicare_rate', 0) + max(medicare_wages - year_params.get('medicare_threshold_s', 0), 0) * year_params.get('addl_medicare_rate', 0), year_params.get('tolerance', 1.0))"
+  references:
+    - source: IRS Pub. 15
+      url: https://www.irs.gov/publications/p15
+  fields: ["amounts.medicare_wages", "amounts.medicare_tax"]
+
+- id: W2_STATE_WITHHOLDING_REQUIRES_STATE
+  form_types: ["W2"]
+  name: State withholding provided without state code
+  severity: warning
+  description: "State withholding is present but employer state is missing."
+  condition:
+    type: expression
+    expr: "state_withholding > 0 and missing(employer_state)"
+  references:
+    - source: IRS W-2 State guidance
+      url: https://www.irs.gov/forms-pubs/about-form-w-2
+  fields: ["amounts.state_withholding", "employer.state"]
+
+- id: W2_ZERO_FED_WITHHOLDING
+  form_types: ["W2"]
+  name: Zero federal withholding with significant wages
+  severity: high
+  description: "Federal withholding is zero while wages exceed $10,000."
+  condition:
+    type: expression
+    expr: "wages > 10000 and federal_withholding <= 0"
+  references:
+    - source: IRS Withholding guidance
+      url: https://www.irs.gov/businesses/small-businesses-self-employed/understanding-employer-withholding
+  fields: ["amounts.wages", "amounts.federal_withholding"]
+
+- id: W2_SOCSEC_WAGES_MISSING
+  form_types: ["W2"]
+  name: Social Security wages missing
+  severity: warning
+  description: "Social Security wages are blank while regular wages are present."
+  condition:
+    type: expression
+    expr: "wages > 0 and social_security_wages <= 0"
+  references:
+    - source: IRS Pub. 15
+      url: https://www.irs.gov/publications/p15
+  fields: ["amounts.wages", "amounts.social_security_wages"]
+
+- id: W2_MEDICARE_WAGES_MISSING
+  form_types: ["W2"]
+  name: Medicare wages missing
+  severity: warning
+  description: "Medicare wages are blank while regular wages are present."
+  condition:
+    type: expression
+    expr: "wages > 0 and medicare_wages <= 0"
+  references:
+    - source: IRS Pub. 15
+      url: https://www.irs.gov/publications/p15
+  fields: ["amounts.wages", "amounts.medicare_wages"]
+
+- id: W2_SOCSEC_WAGES_GT_WAGES
+  form_types: ["W2"]
+  name: Social Security wages exceed total wages
+  severity: warning
+  description: "Social Security wages exceed reported total wages, which is unlikely."
+  condition:
+    type: expression
+    expr: "social_security_wages > wages + year_params.get('tolerance', 1.0)"
+  references:
+    - source: IRS Pub. 15
+      url: https://www.irs.gov/publications/p15
+  fields: ["amounts.wages", "amounts.social_security_wages"]
+
+- id: W2_LOW_OCR_CONFIDENCE
+  form_types: ["W2"]
+  name: OCR confidence is low
+  severity: info
+  description: "OCR confidence below 0.8 may indicate extraction errors; double check numeric boxes."
+  condition:
+    type: expression
+    expr: "ocr_quality < 0.8"
+  references:
+    - source: Internal QA
+      url: https://www.irs.gov/forms-pubs/about-form-w-2
+  fields: ["flags.ocr_quality"]
+
+- id: W2_FIT_WITHHOLDING_REASONABLE
+  form_types: ["W2"]
+  name: Federal withholding appears unreasonably low
+  severity: warning
+  description: "Federal income tax withholding is under 5% of taxable wages despite wages above $20,000."
+  condition:
+    type: expression
+    expr: "get('wages.wages_tips_other', 0) > 20000 and get('wages.federal_income_tax_withheld', 0) < get('wages.wages_tips_other', 0) * 0.05"
+  references:
+    - source: IRS General Instructions for Forms W-2 and W-3
+      url: https://www.irs.gov/pub/irs-pdf/iw2w3.pdf
+  fields: ["wages.federal_income_tax_withheld", "wages.wages_tips_other"]
+
+- id: W2_SS_TAX_MATCH
+  form_types: ["W2"]
+  name: Social Security tax does not align with wages
+  severity: error
+  description: "Social Security tax withheld should equal Social Security wages up to the wage base times the rate."
+  condition:
+    type: expression
+    expr: "not within_tolerance(get('wages.social_security_tax_withheld', 0), min(get('wages.social_security_wages', get('wages.wages_tips_other', 0)), year_params.get('ss_wage_base', 0)) * year_params.get('ss_rate', 0), year_params.get('tolerance', 1.0))"
+  references:
+    - source: IRS General Instructions for Forms W-2 and W-3
+      url: https://www.irs.gov/pub/irs-pdf/iw2w3.pdf
+  fields: ["wages.social_security_tax_withheld", "wages.social_security_wages"]
+
+- id: W2_MEDICARE_TAX_MATCH
+  form_types: ["W2"]
+  name: Medicare tax does not align with wages
+  severity: error
+  description: "Medicare tax withheld should equal Medicare wages times the base rate plus Additional Medicare on wages above the threshold."
+  condition:
+    type: expression
+    expr: "not within_tolerance(get('wages.medicare_tax_withheld', 0), get('wages.medicare_wages', 0) * year_params.get('medicare_rate', 0) + max(get('wages.medicare_wages', 0) - year_params.get('medicare_threshold_s', 0), 0) * year_params.get('addl_medicare_rate', 0), year_params.get('tolerance', 1.0))"
+  references:
+    - source: IRS General Instructions for Forms W-2 and W-3
+      url: https://www.irs.gov/pub/irs-pdf/iw2w3.pdf
+  fields: ["wages.medicare_tax_withheld", "wages.medicare_wages"]
+
+- id: W2_BOX1_VS_BOX3_5_RELATION
+  form_types: ["W2"]
+  name: Box 1 wages inconsistent with Boxes 3 and 5
+  severity: warning
+  description: "Box 1 wages differ materially from Social Security or Medicare wages; verify pre-tax deductions and coding."
+  condition:
+    type: expression
+    expr: "abs(get('wages.wages_tips_other', 0) - get('wages.social_security_wages', 0)) > year_params.get('tolerance', 1.0) or abs(get('wages.wages_tips_other', 0) - get('wages.medicare_wages', 0)) > year_params.get('tolerance', 1.0)"
+  references:
+    - source: IRS General Instructions for Forms W-2 and W-3
+      url: https://www.irs.gov/pub/irs-pdf/iw2w3.pdf
+  fields: ["wages.wages_tips_other", "wages.social_security_wages", "wages.medicare_wages"]
+
+- id: W2_STATE_WAGE_TAX_VALID
+  form_types: ["W2"]
+  name: State wages and withholding inconsistent
+  severity: warning
+  description: "State tax withholding is non-zero but exceeds 15% of state wages or state wages are missing."
+  condition:
+    type: expression
+    expr: "(get('state.state_tax_withheld', 0) > 0 and get('state.state_wages', 0) <= 0) or get('state.state_tax_withheld', 0) > get('state.state_wages', 0) * 0.15"
+  references:
+    - source: IRS General Instructions for Forms W-2 and W-3
+      url: https://www.irs.gov/pub/irs-pdf/iw2w3.pdf
+  fields: ["state.state_wages", "state.state_tax_withheld"]
+
+- id: W2_MULTI_W2_WAGE_BASE
+  form_types: ["W2"]
+  name: Social Security wages far below total wages
+  severity: warning
+  description: "Social Security wages are significantly lower than Box 1 wages; confirm multiple W-2s or missing wages."
+  condition:
+    type: expression
+    expr: "get('wages.wages_tips_other', 0) > 0 and (get('wages.wages_tips_other', 0) - get('wages.social_security_wages', 0)) > year_params.get('ss_wage_base', 0) * 0.1"
+  references:
+    - source: IRS General Instructions for Forms W-2 and W-3
+      url: https://www.irs.gov/pub/irs-pdf/iw2w3.pdf
+  fields: ["wages.wages_tips_other", "wages.social_security_wages"]
+
+- id: W2_YEAR_CONSISTENCY
+  form_types: ["W2"]
+  name: Tax year outside supported range
+  severity: error
+  description: "Tax year on the document is not supported by configured parameters."
+  condition:
+    type: expression
+    expr: "tax_year is None or tax_year not in year_params"
+  references:
+    - source: IRS General Instructions for Forms W-2 and W-3
+      url: https://www.irs.gov/pub/irs-pdf/iw2w3.pdf
+  fields: ["tax_year"]
+
+- id: W2_EIN_VALID_CHECKSUM
+  form_types: ["W2"]
+  name: Employer EIN fails format validation
+  severity: error
+  description: "Employer EIN fails checksum/format validation; verify against IRS-assigned EIN."
+  condition:
+    type: expression
+    expr: "not is_valid_ein(employer_ein)"
+  references:
+    - source: IRS General Instructions for Forms W-2 and W-3
+      url: https://www.irs.gov/pub/irs-pdf/iw2w3.pdf
+  fields: ["employer.ein"]

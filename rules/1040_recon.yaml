@@ -1,0 +1,64 @@
+- id: 1040_RECON_TOTAL_INCOME_MISMATCH
+  form_types: ["1040"]
+  name: Total income does not reconcile
+  severity: warning
+  description: "Total income does not equal the sum of wages, interest, and nonemployee compensation."
+  condition:
+    type: expression
+    expr: "exists('amounts.total_income') and abs(get_amount('total_income', 0) - (wages + get_amount('interest_income', 0) + get_amount('nonemployee_compensation', 0))) > year_params.get('tolerance', 1.0)"
+  references:
+    - source: IRS Form 1040 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1040
+  fields: ["amounts.total_income", "amounts.wages", "amounts.interest_income", "amounts.nonemployee_compensation"]
+
+- id: 1040_RECON_AGI_MISSING
+  form_types: ["1040"]
+  name: Adjusted gross income missing
+  severity: info
+  description: "Total income is present but AGI is missing."
+  condition:
+    type: expression
+    expr: "get_amount('total_income', 0) > 0 and not exists('amounts.agi')"
+  references:
+    - source: IRS Form 1040 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1040
+  fields: ["amounts.total_income", "amounts.agi"]
+
+- id: 1040_RECON_AGI_GT_TOTAL
+  form_types: ["1040"]
+  name: AGI exceeds total income
+  severity: warning
+  description: "Adjusted gross income exceeds total income."
+  condition:
+    type: expression
+    expr: "exists('amounts.agi') and exists('amounts.total_income') and get_amount('agi', 0) - get_amount('total_income', 0) > year_params.get('tolerance', 1.0)"
+  references:
+    - source: IRS Form 1040 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1040
+  fields: ["amounts.agi", "amounts.total_income"]
+
+- id: 1040_RECON_WITHHOLDING_WITH_NO_INCOME
+  form_types: ["1040"]
+  name: Withholding present without income
+  severity: warning
+  description: "Withholding exists while total income is zero or negative."
+  condition:
+    type: expression
+    expr: "get_amount('total_income', 0) <= 0 and federal_withholding > 0"
+  references:
+    - source: IRS Form 1040 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1040
+  fields: ["amounts.total_income", "amounts.federal_withholding"]
+
+- id: 1040_RECON_ADDITIONAL_MEDICARE_EXPECTED
+  form_types: ["1040"]
+  name: Additional Medicare tax missing for high wages
+  severity: warning
+  description: "Wages exceed the Additional Medicare threshold but no additional tax is reported."
+  condition:
+    type: expression
+    expr: "wages > year_params.get('medicare_threshold_s', 0) and get_amount('addl_medicare_tax', 0) <= 0"
+  references:
+    - source: IRS Form 8959 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-8959
+  fields: ["amounts.wages", "amounts.addl_medicare_tax"]

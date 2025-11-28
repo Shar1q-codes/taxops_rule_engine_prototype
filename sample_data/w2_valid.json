@@ -1,0 +1,29 @@
+{
+  "doc_id": "w2-valid-2024",
+  "form_type": "W2",
+  "employee": {
+    "first_name": "John",
+    "last_name": "Doe",
+    "ssn": "123-45-6789",
+    "address": "123 Main St, Denver, CO 80202"
+  },
+  "employer": {
+    "name": "Tech Corp LLC",
+    "ein": "12-3456789",
+    "address": "500 Market St, Denver, CO 80202"
+  },
+  "wages": {
+    "wages_tips_other": 50000.0,
+    "federal_income_tax_withheld": 6000.0,
+    "social_security_wages": 50000.0,
+    "social_security_tax_withheld": 3100.0,
+    "medicare_wages": 50000.0,
+    "medicare_tax_withheld": 725.0
+  },
+  "state": {
+    "state_code": "CO",
+    "state_wages": 50000.0,
+    "state_tax_withheld": 2500.0
+  },
+  "tax_year": 2024
+}

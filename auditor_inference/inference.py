@@ -24,8 +24,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import yaml
 
 from auditor.findings import filter_llm_findings_by_doc, merge_findings, normalize_llm_findings
-from rule_engine.core import apply_rules
-from rule_engine.context import get_context_for_year
+from engine import RuleEngine, rule_engine as default_rule_engine
 from training_prep.formatter import format_auditor_prompt
 
 logger = logging.getLogger(__name__)
@@ -339,10 +338,45 @@ def audit_document(
     doc_type = doc.get("doc_type")
     tax_year = doc.get("tax_year")
 
-    # Deterministic findings
-    rules = load_rules_for_doc(doc_type) if doc_type else []
-    context = get_context_for_year(tax_year) if tax_year else {}
-    rule_findings = apply_rules(doc, rules, context)
+    # Deterministic findings from the production rule engine
+    rule_engine: RuleEngine = default_rule_engine
+    rule_issues: List[Dict[str, Any]] = []
+    try:
+        rule_issues = rule_engine.evaluate(doc, form_type=doc_type, tax_year=tax_year)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Rule engine evaluation failed: %s", exc)
+        if isinstance(exc, ValueError):
+            raise
+
+    def _issue_to_finding(issue: Dict[str, Any]) -> Dict[str, Any]:
+        citations = issue.get("citations") or []
+        citation_hint_parts = []
+        for ref in citations:
+            if not isinstance(ref, dict):
+                continue
+            src = ref.get("source") or ""
+            url = ref.get("url") or ""
+            citation_hint_parts.append(f"{src} {url}".strip())
+        citation_hint = "; ".join([p for p in citation_hint_parts if p])
+        return {
+            "finding_id": uuid.uuid4().hex,
+            "doc_id": doc_id,
+            "source": "RULE_ENGINE_V2",
+            "code": issue.get("id"),
+            "category": issue.get("name"),
+            "severity": issue.get("severity"),
+            "summary": issue.get("message"),
+            "details": issue.get("message"),
+            "suggested_action": issue.get("hint") or "Review and correct the highlighted fields.",
+            "citation_hint": citation_hint,
+            "tags": issue.get("fields") or [],
+            "fields": issue.get("fields") or [],
+            "citations": citations,
+            "rule_source": issue.get("rule_source"),
+            "condition": issue.get("condition"),
+        }
+
+    rule_findings = [_issue_to_finding(i) for i in rule_issues]
 
     # Retrieval context
     chunks = load_chunk_index(chunk_index_path)
@@ -407,12 +441,14 @@ def audit_document(
         "llm_mode": "REMOTE" if (llm_endpoint and not skip_llm) else ("LOCAL" if (not skip_llm and not llm_endpoint) else "SKIPPED"),
         "retrieval_sources": retrievals,
         "rule_findings": rule_findings,
+        "rule_issues": rule_issues,
         "llm_findings": filtered_llm,
         "merged_findings": merged,
     }
     return {
         "doc": doc,
         "rule_findings": rule_findings,
+        "rule_issues": rule_issues,
         "llm_findings": filtered_llm,
         "merged_findings": merged,
         "audit_trail": audit_trail,

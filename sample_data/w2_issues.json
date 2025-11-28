@@ -1,0 +1,29 @@
+{
+  "doc_id": "w2-errors-2024",
+  "form_type": "W2",
+  "employee": {
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "ssn": "000-00-0000",
+    "address": "77 Elm St, Austin, TX 73301"
+  },
+  "employer": {
+    "name": "Problem Co Inc",
+    "ein": "99-999999",
+    "address": "800 Industrial Rd, Austin, TX 73301"
+  },
+  "wages": {
+    "wages_tips_other": 80000.0,
+    "federal_income_tax_withheld": 500.0,
+    "social_security_wages": 40000.0,
+    "social_security_tax_withheld": 0.0,
+    "medicare_wages": 80000.0,
+    "medicare_tax_withheld": 10.0
+  },
+  "state": {
+    "state_code": "TX",
+    "state_wages": 80000.0,
+    "state_tax_withheld": 0.0
+  },
+  "tax_year": 2024
+}

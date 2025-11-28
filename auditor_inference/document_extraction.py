@@ -12,10 +12,28 @@ Dependencies for image OCR (install as needed):
 from __future__ import annotations
 
 import json
+import logging
 import re
+import uuid
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
+
+logger = logging.getLogger(__name__)
+
+
+def safe_float(val: Any, default: float = 0.0) -> float:
+    """Parse a float safely, stripping commas and handling empty values."""
+    if val is None:
+        return float(default)
+    try:
+        if isinstance(val, str):
+            val = val.replace(",", "").strip()
+            if not val:
+                return float(default)
+        return float(val)
+    except Exception:
+        return float(default)
 
 
 def load_json_document(path: str | Path) -> Dict[str, Any]:
@@ -28,9 +46,10 @@ def load_json_document(path: str | Path) -> Dict[str, Any]:
     return doc
 
 
-def extract_text_from_pdf(path_or_stream: str | Path | BytesIO) -> str:
+def extract_text_from_pdf(path_or_stream: str | Path | BytesIO) -> Tuple[str, bool]:
     """Extract text from PDF using pdfplumber or PyPDF2, with OCR fallback."""
     text = ""
+    used_ocr = False
     try:
         import pdfplumber  # type: ignore
 
@@ -38,7 +57,8 @@ def extract_text_from_pdf(path_or_stream: str | Path | BytesIO) -> str:
             text = "\n".join(page.extract_text() or "" for page in pdf.pages)
     except ImportError:
         text = ""
-    except Exception:
+    except Exception as exc:
+        logger.warning("pdfplumber extraction failed: %s", exc)
         text = ""
 
     if not text or len(text.strip()) < 50:
@@ -48,7 +68,8 @@ def extract_text_from_pdf(path_or_stream: str | Path | BytesIO) -> str:
 
             reader = PdfReader(path_or_stream)
             text = "\n".join(page.extract_text() or "" for page in reader.pages)
-        except Exception:
+        except Exception as exc:
+            logger.warning("PyPDF2 extraction failed: %s", exc)
             text = ""
 
     if not text or len(text.strip()) < 50:
@@ -61,16 +82,17 @@ def extract_text_from_pdf(path_or_stream: str | Path | BytesIO) -> str:
             if isinstance(path_or_stream, (str, Path)):
                 images = convert_from_path(str(path_or_stream), dpi=200)
             else:
-                # BytesIO or file-like
                 raw = path_or_stream.read() if hasattr(path_or_stream, "read") else path_or_stream
                 images = convert_from_bytes(raw, dpi=200)
             ocr_texts = [pytesseract.image_to_string(img) for img in images]
             text = "\n".join(ocr_texts)
-        except Exception:
+            used_ocr = True
+        except Exception as exc:
+            logger.warning("OCR extraction failed: %s", exc)
             # If OCR dependencies not available, keep whatever text we have (possibly empty)
             pass
 
-    return text
+    return text, used_ocr
 
 
 def extract_structured_fields(text: str) -> Dict[str, Any]:
@@ -80,7 +102,7 @@ def extract_structured_fields(text: str) -> Dict[str, Any]:
     ein_match = re.search(r"\b(\d{2}-\d{7})\b", text)
     year_match = re.search(r"\b(20\d{2})\b", text)
     if ssn_match:
-        fields["taxpayer"] = {"ssn": ssn_match.group(1)}
+        fields["employee"] = {"ssn": ssn_match.group(1)}
     if ein_match:
         fields.setdefault("employer", {})["ein"] = ein_match.group(1)
     if year_match:
@@ -125,6 +147,54 @@ def extract_text_from_image_bytes(data: bytes) -> str:
         return pytesseract.image_to_string(img)
 
 
+def _blank_w2(doc_id: str) -> Dict[str, Any]:
+    return {
+        "doc_id": doc_id,
+        "form_type": "W2",
+        "doc_type": "W2",
+        "employee": {"first_name": "", "last_name": "", "ssn": ""},
+        "employer": {"name": "", "ein": ""},
+        "wages": {
+            "wages_tips_other": 0.0,
+            "federal_income_tax_withheld": 0.0,
+            "social_security_wages": 0.0,
+            "social_security_tax_withheld": 0.0,
+            "medicare_wages": 0.0,
+            "medicare_tax_withheld": 0.0,
+        },
+        "state": {"state_code": "", "state_wages": 0.0, "state_tax_withheld": 0.0},
+        "tax_year": None,
+        "ocr_quality": 0.5,
+    }
+
+
+def _apply_extracted_fields(doc: Dict[str, Any], extracted: Dict[str, Any]) -> None:
+    if not extracted:
+        return
+    employee = extracted.get("employee") or {}
+    employer = extracted.get("employer") or {}
+    if "first_name" in employee or "last_name" in employee or "ssn" in employee:
+        doc["employee"].update({k: v for k, v in employee.items() if v})
+    if employer:
+        doc["employer"].update({k: v for k, v in employer.items() if v})
+    if "tax_year" in extracted:
+        doc["tax_year"] = extracted["tax_year"]
+
+
+def _assign_ocr_quality(text: str, used_ocr: bool) -> float:
+    confidence = 0.9 if text and len(text.strip()) > 80 and not used_ocr else 0.5
+    return 1.0 if confidence >= 0.85 else 0.5
+
+
+def parse_w2_from_text(doc_id: str, text: str, used_ocr: bool) -> Dict[str, Any]:
+    """Normalize extracted text into W-2 structured payload."""
+    doc = _blank_w2(doc_id)
+    extracted = extract_structured_fields(text)
+    _apply_extracted_fields(doc, extracted)
+    doc["ocr_quality"] = _assign_ocr_quality(text, used_ocr)
+    return doc
+
+
 def parse_document(path: str | Path) -> Dict[str, Any]:
     """Parse PDF/image/JSON into a structured dict with minimal heuristics."""
     p = Path(path)
@@ -132,18 +202,16 @@ def parse_document(path: str | Path) -> Dict[str, Any]:
         return load_json_document(p)
 
     if p.suffix.lower() == ".pdf":
-        text = extract_text_from_pdf(p)
-        doc: Dict[str, Any] = {"doc_id": p.stem, "doc_type": "UNKNOWN", "raw_text": text}
-        doc.update(extract_structured_fields(text))
-        doc["clauses"] = extract_clause_indicators(text)
+        text, used_ocr = extract_text_from_pdf(p)
+        doc_id = p.stem or uuid.uuid4().hex
+        doc = parse_w2_from_text(doc_id, text, used_ocr)
         doc["meta"] = {"source_file": p.name}
         return doc
 
     if p.suffix.lower() in {".png", ".jpg", ".jpeg", ".tiff", ".bmp"}:
         text = extract_text_from_image(p)
-        doc = {"doc_id": p.stem, "doc_type": "UNKNOWN", "raw_text": text}
-        doc.update(extract_structured_fields(text))
-        doc["clauses"] = extract_clause_indicators(text)
+        doc_id = p.stem or uuid.uuid4().hex
+        doc = parse_w2_from_text(doc_id, text, used_ocr=True)
         doc["meta"] = {"source_file": p.name}
         return doc
 
@@ -163,18 +231,16 @@ def parse_document_bytes(filename: str, data: bytes) -> Dict[str, Any]:
         return doc
 
     if suffix == ".pdf":
-        text = extract_text_from_pdf(BytesIO(data))
-        doc: Dict[str, Any] = {"doc_id": Path(filename).stem, "doc_type": "UNKNOWN", "raw_text": text}
-        doc.update(extract_structured_fields(text))
-        doc["clauses"] = extract_clause_indicators(text)
+        text, used_ocr = extract_text_from_pdf(BytesIO(data))
+        doc_id = Path(filename).stem or uuid.uuid4().hex
+        doc = parse_w2_from_text(doc_id, text, used_ocr)
         doc["meta"] = {"source_file": filename}
         return doc
 
     if suffix in {".png", ".jpg", ".jpeg", ".tiff", ".bmp"}:
         text = extract_text_from_image_bytes(data)
-        doc = {"doc_id": Path(filename).stem, "doc_type": "UNKNOWN", "raw_text": text}
-        doc.update(extract_structured_fields(text))
-        doc["clauses"] = extract_clause_indicators(text)
+        doc_id = Path(filename).stem or uuid.uuid4().hex
+        doc = parse_w2_from_text(doc_id, text, used_ocr=True)
         doc["meta"] = {"source_file": filename}
         return doc
 

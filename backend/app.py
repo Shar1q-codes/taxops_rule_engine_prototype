@@ -157,6 +157,7 @@ async def audit_document_endpoint(
     payload = {
         "processing_time_ms": elapsed_ms,
         "doc_id": result.get("doc", {}).get("doc_id"),
+        "rule_issues": result.get("rule_issues", []),
         "rule_findings": result.get("rule_findings", []),
         "llm_findings": result.get("llm_findings", []),
         "merged_findings": result.get("merged_findings", []),
@@ -165,7 +166,9 @@ async def audit_document_endpoint(
             "timestamp": result.get("audit_trail", {}).get("timestamp"),
             "llm_mode": result.get("audit_trail", {}).get("llm_mode"),
             "llm_skipped": result.get("audit_trail", {}).get("llm_skipped"),
+            "rule_issues": result.get("audit_trail", {}).get("rule_issues", []),
         },
+        "metadata": result.get("audit_trail", {}),
     }
     return payload
 

@@ -1,0 +1,64 @@
+- id: INT_PAYER_TIN_FORMAT
+  form_types: ["1099-INT"]
+  name: Payer TIN format invalid
+  severity: error
+  description: "Payer TIN is missing or not in XX-XXXXXXX format."
+  condition:
+    type: expression
+    expr: "not is_valid_ein(payer_tin)"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields: ["payer.tin"]
+
+- id: INT_RECIPIENT_TIN_FORMAT
+  form_types: ["1099-INT"]
+  name: Recipient TIN format invalid
+  severity: warning
+  description: "Recipient SSN/TIN is missing or malformed."
+  condition:
+    type: expression
+    expr: "not is_valid_ssn(taxpayer_ssn)"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields: ["taxpayer.ssn"]
+
+- id: INT_NEGATIVE_INTEREST
+  form_types: ["1099-INT"]
+  name: Negative interest income
+  severity: error
+  description: "Interest income cannot be negative."
+  condition:
+    type: expression
+    expr: "get_amount('interest_income', 0) < 0"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields: ["amounts.interest_income"]
+
+- id: INT_WITHHOLDING_EXCEEDS_INTEREST
+  form_types: ["1099-INT"]
+  name: Withholding exceeds reported interest
+  severity: warning
+  description: "Federal withholding exceeds reported interest income."
+  condition:
+    type: expression
+    expr: "federal_withholding > get_amount('interest_income', 0) + year_params.get('tolerance', 1.0)"
+  references:
+    - source: IRS Backup Withholding
+      url: https://www.irs.gov/businesses/small-businesses-self-employed/backup-withholding
+  fields: ["amounts.federal_withholding", "amounts.interest_income"]
+
+- id: INT_STATE_WITHHOLDING_REQUIRES_STATE
+  form_types: ["1099-INT"]
+  name: State withholding provided without state code
+  severity: warning
+  description: "State withholding is present but payer state is missing."
+  condition:
+    type: expression
+    expr: "state_withholding > 0 and missing(payer_state)"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields: ["amounts.state_withholding", "payer.state"]

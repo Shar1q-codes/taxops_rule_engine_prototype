@@ -1,0 +1,64 @@
+- id: NEC_PAYER_TIN_FORMAT
+  form_types: ["1099-NEC"]
+  name: Payer TIN format invalid
+  severity: error
+  description: "Payer TIN is missing or not in XX-XXXXXXX format."
+  condition:
+    type: expression
+    expr: "not is_valid_ein(payer_tin)"
+  references:
+    - source: IRS 1099-NEC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-nec
+  fields: ["payer.tin"]
+
+- id: NEC_RECIPIENT_TIN_FORMAT
+  form_types: ["1099-NEC"]
+  name: Recipient TIN format invalid
+  severity: warning
+  description: "Recipient SSN/TIN is missing or malformed."
+  condition:
+    type: expression
+    expr: "not is_valid_ssn(taxpayer_ssn)"
+  references:
+    - source: IRS 1099-NEC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-nec
+  fields: ["taxpayer.ssn"]
+
+- id: NEC_NEGATIVE_COMP
+  form_types: ["1099-NEC"]
+  name: Negative nonemployee compensation
+  severity: error
+  description: "Nonemployee compensation cannot be negative."
+  condition:
+    type: expression
+    expr: "get_amount('nonemployee_compensation', 0) < 0"
+  references:
+    - source: IRS 1099-NEC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-nec
+  fields: ["amounts.nonemployee_compensation"]
+
+- id: NEC_WITHHOLDING_EXCEEDS_COMP
+  form_types: ["1099-NEC"]
+  name: Withholding exceeds compensation
+  severity: warning
+  description: "Federal withholding exceeds reported nonemployee compensation."
+  condition:
+    type: expression
+    expr: "federal_withholding > get_amount('nonemployee_compensation', 0) + year_params.get('tolerance', 1.0)"
+  references:
+    - source: IRS Backup Withholding
+      url: https://www.irs.gov/businesses/small-businesses-self-employed/backup-withholding
+  fields: ["amounts.federal_withholding", "amounts.nonemployee_compensation"]
+
+- id: NEC_STATE_WITHHOLDING_REQUIRES_STATE
+  form_types: ["1099-NEC"]
+  name: State withholding provided without state code
+  severity: warning
+  description: "State withholding is present but payer state is missing."
+  condition:
+    type: expression
+    expr: "state_withholding > 0 and missing(payer_state)"
+  references:
+    - source: IRS 1099-NEC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-nec
+  fields: ["amounts.state_withholding", "payer.state"]
