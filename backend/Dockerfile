@@ -10,15 +10,13 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Copy backend and core packages
-COPY backend /app
-COPY auditor_inference /app/auditor_inference
-COPY auditor /app/auditor
-COPY rule_engine /app/rule_engine
-COPY corallo_taxops_rule_engine /app/corallo_taxops_rule_engine
+# Copy full repository (includes backend, auditor_inference, etc.)
+COPY . /app
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
+
+WORKDIR /app/backend
 
 EXPOSE 8000
 
