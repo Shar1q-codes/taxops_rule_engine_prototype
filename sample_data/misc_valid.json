@@ -1,0 +1,36 @@
+{
+  "doc_id": "misc-valid-2024",
+  "doc_type": "1099-MISC",
+  "tax_year": 2024,
+  "payer": {
+    "name": "Summit Holdings",
+    "tin": "98-7654321",
+    "address": "500 Elm St, Denver, CO 80205"
+  },
+  "recipient": {
+    "name": "Riley Carter",
+    "tin": "987-65-4321",
+    "address": "700 Oak Ave, Denver, CO 80206"
+  },
+  "amounts": {
+    "box_1_rents": 2000.0,
+    "box_2_royalties": 0.0,
+    "box_3_other_income": 300.0,
+    "box_4_federal_income_tax_withheld": 200.0,
+    "box_6_medical_healthcare_payments": 0.0,
+    "box_10_gross_proceeds_paid_to_attorney": 0.0
+  },
+  "state_items": [
+    {
+      "state_code": "CO",
+      "state_id_number": "CO-5555",
+      "state_tax_withheld": 80.0,
+      "state_income": 2300.0
+    }
+  ],
+  "ocr_quality": 0.99,
+  "meta": {
+    "source_pdf_path": "sample_data/misc_valid.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

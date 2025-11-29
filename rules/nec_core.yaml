@@ -1,8 +1,36 @@
+- id: NEC_DOC_TYPE
+  form_types: ["1099-NEC"]
+  name: Incorrect document type
+  severity: error
+  description: "Document must be labeled as 1099-NEC."
+  condition:
+    type: expression
+    expr: "form_type != '1099-NEC'"
+  references:
+    - source: IRS 1099-NEC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-nec
+  fields: ["doc_type"]
+
+- id: NEC_PAYER_TIN_REQUIRED
+  form_types: ["1099-NEC"]
+  name: Payer TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Payer TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(payer_tin)"
+  references:
+    - source: IRS 1099-NEC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-nec
+  fields: ["payer.tin"]
+
 - id: NEC_PAYER_TIN_FORMAT
   form_types: ["1099-NEC"]
   name: Payer TIN format invalid
   severity: error
-  description: "Payer TIN is missing or not in XX-XXXXXXX format."
+  category: "TIN/IDENTITY"
+  description: "Payer TIN must be in valid EIN format."
   condition:
     type: expression
     expr: "not is_valid_ein(payer_tin)"
@@ -11,54 +39,186 @@
       url: https://www.irs.gov/forms-pubs/about-form-1099-nec
   fields: ["payer.tin"]
 
+- id: NEC_RECIPIENT_TIN_REQUIRED
+  form_types: ["1099-NEC"]
+  name: Recipient TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Recipient TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(recipient_tin)"
+  references:
+    - source: IRS 1099-NEC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-nec
+  fields: ["recipient.tin"]
+
 - id: NEC_RECIPIENT_TIN_FORMAT
   form_types: ["1099-NEC"]
   name: Recipient TIN format invalid
-  severity: warning
-  description: "Recipient SSN/TIN is missing or malformed."
-  condition:
-    type: expression
-    expr: "not is_valid_ssn(taxpayer_ssn)"
-  references:
-    - source: IRS 1099-NEC Instructions
-      url: https://www.irs.gov/forms-pubs/about-form-1099-nec
-  fields: ["taxpayer.ssn"]
-
-- id: NEC_NEGATIVE_COMP
-  form_types: ["1099-NEC"]
-  name: Negative nonemployee compensation
   severity: error
-  description: "Nonemployee compensation cannot be negative."
+  category: "TIN/IDENTITY"
+  description: "Recipient TIN must be in valid SSN/EIN format."
   condition:
     type: expression
-    expr: "get_amount('nonemployee_compensation', 0) < 0"
+    expr: "not (is_valid_ssn(recipient_tin) or is_valid_ein(recipient_tin))"
   references:
     - source: IRS 1099-NEC Instructions
       url: https://www.irs.gov/forms-pubs/about-form-1099-nec
-  fields: ["amounts.nonemployee_compensation"]
+  fields: ["recipient.tin"]
 
-- id: NEC_WITHHOLDING_EXCEEDS_COMP
+- id: NEC_AMOUNTS_NONNEGATIVE
   form_types: ["1099-NEC"]
-  name: Withholding exceeds compensation
-  severity: warning
-  description: "Federal withholding exceeds reported nonemployee compensation."
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Nonemployee compensation and withholding amounts must be zero or positive."
   condition:
     type: expression
-    expr: "federal_withholding > get_amount('nonemployee_compensation', 0) + year_params.get('tolerance', 1.0)"
+    expr: "min([get_amount(k, 0) for k in ['box_1_nonemployee_compensation','box_4_federal_income_tax_withheld','box_5_state_tax_withheld_total']] or [0]) < 0"
+  references:
+    - source: IRS 1099-NEC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-nec
+  fields:
+    - "amounts.box_1_nonemployee_compensation"
+    - "amounts.box_4_federal_income_tax_withheld"
+    - "amounts.box_5_state_tax_withheld_total"
+
+- id: NEC_ZERO_DOCUMENT_SANITY
+  form_types: ["1099-NEC"]
+  name: All key amounts zero
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "All primary compensation and withholding amounts are zero; likely placeholder or extraction issue."
+  condition:
+    type: expression
+    expr: "get_amount('box_1_nonemployee_compensation', 0) + get_amount('box_4_federal_income_tax_withheld', 0) + get_amount('box_5_state_tax_withheld_total', 0) == 0"
+  references:
+    - source: IRS 1099-NEC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-nec
+  fields:
+    - "amounts.box_1_nonemployee_compensation"
+    - "amounts.box_4_federal_income_tax_withheld"
+    - "amounts.box_5_state_tax_withheld_total"
+
+- id: NEC_COMP_REQUIRED_FOR_WITHHOLDING
+  form_types: ["1099-NEC"]
+  name: Withholding present without compensation
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Federal withholding is reported but nonemployee compensation is zero."
+  condition:
+    type: expression
+    expr: "get_amount('box_4_federal_income_tax_withheld', 0) > 0 and get_amount('box_1_nonemployee_compensation', 0) <= 0"
+  references:
+    - source: IRS 1099-NEC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-nec
+  fields:
+    - "amounts.box_1_nonemployee_compensation"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: NEC_WITHHOLDING_RATIO_SANITY
+  form_types: ["1099-NEC"]
+  name: Withholding ratio anomaly
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Federal withholding ratio is outside a broad plausible band relative to compensation."
+  condition:
+    type: expression
+    expr: "get_amount('box_1_nonemployee_compensation', 0) > 0 and get_amount('box_4_federal_income_tax_withheld', 0) > 0 and (get_amount('box_4_federal_income_tax_withheld', 0) / get_amount('box_1_nonemployee_compensation', 0) < 0.05 or get_amount('box_4_federal_income_tax_withheld', 0) / get_amount('box_1_nonemployee_compensation', 0) > 0.4)"
   references:
     - source: IRS Backup Withholding
       url: https://www.irs.gov/businesses/small-businesses-self-employed/backup-withholding
-  fields: ["amounts.federal_withholding", "amounts.nonemployee_compensation"]
+  fields:
+    - "amounts.box_1_nonemployee_compensation"
+    - "amounts.box_4_federal_income_tax_withheld"
 
-- id: NEC_STATE_WITHHOLDING_REQUIRES_STATE
+- id: NEC_VERY_LOW_COMP_WITH_HIGH_WITHHOLDING
   form_types: ["1099-NEC"]
-  name: State withholding provided without state code
-  severity: warning
-  description: "State withholding is present but payer state is missing."
+  name: Low compensation, high withholding
+  severity: info
+  category: "WITHHOLDING"
+  description: "Compensation is very small while withholding is comparatively large; review for anomaly."
   condition:
     type: expression
-    expr: "state_withholding > 0 and missing(payer_state)"
+    expr: "get_amount('box_1_nonemployee_compensation', 0) < 50 and get_amount('box_4_federal_income_tax_withheld', 0) > get_amount('box_1_nonemployee_compensation', 0) * 0.5"
+  references:
+    - source: IRS Backup Withholding
+      url: https://www.irs.gov/businesses/small-businesses-self-employed/backup-withholding
+  fields:
+    - "amounts.box_1_nonemployee_compensation"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: NEC_STATE_TAX_NONNEGATIVE
+  form_types: ["1099-NEC"]
+  name: State tax cannot be negative
+  severity: error
+  category: "STATE/LOCAL"
+  description: "State tax withholding must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([si.get('state_tax_withheld', 0) for si in get('state_items', [])] or [0]) < 0"
   references:
     - source: IRS 1099-NEC Instructions
       url: https://www.irs.gov/forms-pubs/about-form-1099-nec
-  fields: ["amounts.state_withholding", "payer.state"]
+  fields:
+    - "state_items[].state_tax_withheld"
+
+- id: NEC_STATE_TAX_VS_COMPENSATION
+  form_types: ["1099-NEC"]
+  name: State withholding exceeds compensation
+  severity: warning
+  category: "STATE/LOCAL"
+  description: "Total state withholding exceeds total nonemployee compensation."
+  condition:
+    type: expression
+    expr: "sum([si.get('state_tax_withheld', 0) for si in get('state_items', [])]) > get_amount('box_1_nonemployee_compensation', 0)"
+  references:
+    - source: IRS 1099-NEC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-nec
+  fields:
+    - "state_items[].state_tax_withheld"
+    - "amounts.box_1_nonemployee_compensation"
+
+- id: NEC_STATE_CODE_FORMAT
+  form_types: ["1099-NEC"]
+  name: State code format invalid
+  severity: warning
+  category: "STATE/LOCAL"
+  description: "State code on state items is missing or not a valid two-character code."
+  condition:
+    type: expression
+    expr: "any((not si.get('state_code') or len(str(si.get('state_code')).strip()) != 2 or re_match(r'[^A-Za-z]{2}', str(si.get('state_code')).strip())) for si in get('state_items', []))"
+  references:
+    - source: IRS 1099-NEC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-nec
+  fields:
+    - "state_items[].state_code"
+
+- id: NEC_REQUIRED_PAYER_INFO
+  form_types: ["1099-NEC"]
+  name: Payer info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Payer name or address information is missing."
+  condition:
+    type: expression
+    expr: "missing(get('payer.name', ''))"
+  references:
+    - source: IRS 1099-NEC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-nec
+  fields: ["payer.name"]
+
+- id: NEC_REQUIRED_RECIPIENT_INFO
+  form_types: ["1099-NEC"]
+  name: Recipient info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Recipient name or address information is missing."
+  condition:
+    type: expression
+    expr: "missing(get('recipient.name', '')) or missing(get('recipient.address', ''))"
+  references:
+    - source: IRS 1099-NEC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-nec
+  fields: ["recipient.name"]

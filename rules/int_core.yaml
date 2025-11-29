@@ -1,3 +1,42 @@
+- id: INT_DOC_TYPE
+  form_types: ["1099-INT"]
+  name: Incorrect document type
+  severity: error
+  description: "Document must be labeled as 1099-INT."
+  condition:
+    type: expression
+    expr: "form_type != '1099-INT'"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields: ["doc_type"]
+
+- id: INT_TAX_YEAR_RANGE
+  form_types: ["1099-INT"]
+  name: Tax year outside supported range
+  severity: error
+  description: "Tax year is missing or outside supported range (2010-2026)."
+  condition:
+    type: expression
+    expr: "tax_year is None or tax_year < 2010 or tax_year > 2026"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields: ["tax_year"]
+
+- id: INT_PAYER_TIN_REQUIRED
+  form_types: ["1099-INT"]
+  name: Payer TIN missing
+  severity: error
+  description: "Payer TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(payer_tin)"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields: ["payer.tin"]
+
 - id: INT_PAYER_TIN_FORMAT
   form_types: ["1099-INT"]
   name: Payer TIN format invalid
@@ -11,54 +50,232 @@
       url: https://www.irs.gov/forms-pubs/about-form-1099-int
   fields: ["payer.tin"]
 
+- id: INT_RECIPIENT_TIN_REQUIRED
+  form_types: ["1099-INT"]
+  name: Recipient TIN missing
+  severity: error
+  description: "Recipient TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(recipient_tin)"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields: ["recipient.tin"]
+
 - id: INT_RECIPIENT_TIN_FORMAT
   form_types: ["1099-INT"]
   name: Recipient TIN format invalid
-  severity: warning
+  severity: error
   description: "Recipient SSN/TIN is missing or malformed."
   condition:
     type: expression
-    expr: "not is_valid_ssn(taxpayer_ssn)"
+    expr: "not (is_valid_ssn(recipient_tin) or is_valid_ein(recipient_tin))"
   references:
     - source: IRS 1099-INT Instructions
       url: https://www.irs.gov/forms-pubs/about-form-1099-int
-  fields: ["taxpayer.ssn"]
+  fields: ["recipient.tin"]
 
-- id: INT_NEGATIVE_INTEREST
+- id: INT_AMOUNTS_NONNEGATIVE
   form_types: ["1099-INT"]
-  name: Negative interest income
+  name: Negative interest or related amounts
   severity: error
-  description: "Interest income cannot be negative."
+  description: "Boxes 1-11 amounts must be zero or positive."
   condition:
     type: expression
-    expr: "get_amount('interest_income', 0) < 0"
+    expr: "min([get_amount(k, 0) for k in ['box_1_interest_income','box_2_early_withdrawal_penalty','box_3_us_savings_bonds_and_treasury_interest','box_4_federal_income_tax_withheld','box_5_investment_expenses','box_6_foreign_tax_paid','box_8_tax_exempt_interest','box_9_specified_private_activity_bond_interest','box_10_market_discount','box_11_bond_premium']] or [0]) < 0"
   references:
     - source: IRS 1099-INT Instructions
       url: https://www.irs.gov/forms-pubs/about-form-1099-int
-  fields: ["amounts.interest_income"]
+  fields:
+    - "amounts.box_1_interest_income"
+    - "amounts.box_2_early_withdrawal_penalty"
+    - "amounts.box_3_us_savings_bonds_and_treasury_interest"
+    - "amounts.box_4_federal_income_tax_withheld"
+    - "amounts.box_5_investment_expenses"
+    - "amounts.box_6_foreign_tax_paid"
+    - "amounts.box_8_tax_exempt_interest"
+    - "amounts.box_9_specified_private_activity_bond_interest"
+    - "amounts.box_10_market_discount"
+    - "amounts.box_11_bond_premium"
 
-- id: INT_WITHHOLDING_EXCEEDS_INTEREST
+- id: INT_ZERO_EVERYTHING_SANITY
   form_types: ["1099-INT"]
-  name: Withholding exceeds reported interest
+  name: All key amounts are zero
   severity: warning
-  description: "Federal withholding exceeds reported interest income."
+  description: "All primary interest and withholding amounts are zero; likely placeholder or extraction issue."
   condition:
     type: expression
-    expr: "federal_withholding > get_amount('interest_income', 0) + year_params.get('tolerance', 1.0)"
+    expr: "sum([get_amount(k, 0) for k in ['box_1_interest_income','box_3_us_savings_bonds_and_treasury_interest','box_4_federal_income_tax_withheld','box_6_foreign_tax_paid','box_8_tax_exempt_interest','box_9_specified_private_activity_bond_interest','box_10_market_discount','box_11_bond_premium']]) == 0"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields:
+    - "amounts.box_1_interest_income"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: INT_BOX4_REQUIRES_INCOME
+  form_types: ["1099-INT"]
+  name: Withholding present without interest
+  severity: warning
+  description: "Federal withholding reported while taxable/tax-exempt interest is zero."
+  condition:
+    type: expression
+    expr: "get_amount('box_4_federal_income_tax_withheld', 0) > 0 and (get_amount('box_1_interest_income', 0) + get_amount('box_3_us_savings_bonds_and_treasury_interest', 0) + get_amount('box_8_tax_exempt_interest', 0)) == 0"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields:
+    - "amounts.box_1_interest_income"
+    - "amounts.box_3_us_savings_bonds_and_treasury_interest"
+    - "amounts.box_8_tax_exempt_interest"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: INT_BACKUP_WITHHOLDING_RATIO
+  form_types: ["1099-INT"]
+  name: Backup withholding ratio anomaly
+  severity: warning
+  description: "Federal withholding ratio is far outside typical backup withholding range (5%-35%)."
+  condition:
+    type: expression
+    expr: "(get_amount('box_1_interest_income', 0) + get_amount('box_3_us_savings_bonds_and_treasury_interest', 0) + get_amount('box_8_tax_exempt_interest', 0)) > 0 and get_amount('box_4_federal_income_tax_withheld', 0) > 0 and (get_amount('box_4_federal_income_tax_withheld', 0) / (get_amount('box_1_interest_income', 0) + get_amount('box_3_us_savings_bonds_and_treasury_interest', 0) + get_amount('box_8_tax_exempt_interest', 0)) < 0.05 or get_amount('box_4_federal_income_tax_withheld', 0) / (get_amount('box_1_interest_income', 0) + get_amount('box_3_us_savings_bonds_and_treasury_interest', 0) + get_amount('box_8_tax_exempt_interest', 0)) > 0.35)"
   references:
     - source: IRS Backup Withholding
       url: https://www.irs.gov/businesses/small-businesses-self-employed/backup-withholding
-  fields: ["amounts.federal_withholding", "amounts.interest_income"]
+  fields:
+    - "amounts.box_1_interest_income"
+    - "amounts.box_3_us_savings_bonds_and_treasury_interest"
+    - "amounts.box_8_tax_exempt_interest"
+    - "amounts.box_4_federal_income_tax_withheld"
 
-- id: INT_STATE_WITHHOLDING_REQUIRES_STATE
+- id: INT_BOX1_REQUIRED_THRESHOLD
   form_types: ["1099-INT"]
-  name: State withholding provided without state code
-  severity: warning
-  description: "State withholding is present but payer state is missing."
+  name: Small interest with large withholding
+  severity: info
+  description: "Interest income is very small while federal withholding is comparatively large; review for anomaly."
   condition:
     type: expression
-    expr: "state_withholding > 0 and missing(payer_state)"
+    expr: "get_amount('box_1_interest_income', 0) < 50 and get_amount('box_4_federal_income_tax_withheld', 0) > get_amount('box_1_interest_income', 0) * 0.5"
+  references:
+    - source: IRS Backup Withholding
+      url: https://www.irs.gov/businesses/small-businesses-self-employed/backup-withholding
+  fields:
+    - "amounts.box_1_interest_income"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: INT_BOX1_REQUIRED_IF_WITHHOLDING
+  form_types: ["1099-INT"]
+  name: Withholding present but no interest income
+  severity: warning
+  description: "Federal income tax withholding present while interest income is zero."
+  condition:
+    type: expression
+    expr: "get_amount('box_4_federal_income_tax_withheld', 0) > 0 and get_amount('box_1_interest_income', 0) <= 0"
   references:
     - source: IRS 1099-INT Instructions
       url: https://www.irs.gov/forms-pubs/about-form-1099-int
-  fields: ["amounts.state_withholding", "payer.state"]
+  fields:
+    - "amounts.box_1_interest_income"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: INT_PRIVATE_ACTIVITY_NOT_EXCEED_TAX_EXEMPT
+  form_types: ["1099-INT"]
+  name: Private activity exceeds tax-exempt
+  severity: warning
+  description: "Specified private activity bond interest should not exceed total tax-exempt interest."
+  condition:
+    type: expression
+    expr: "get_amount('box_9_specified_private_activity_bond_interest', 0) > get_amount('box_8_tax_exempt_interest', 0)"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields:
+    - "amounts.box_8_tax_exempt_interest"
+    - "amounts.box_9_specified_private_activity_bond_interest"
+
+- id: INT_TAX_EXEMPT_WITH_ZERO_TAXABLE
+  form_types: ["1099-INT"]
+  name: Tax-exempt interest with zero taxable
+  severity: info
+  description: "Tax-exempt interest is present while taxable interest is zero; review for completeness."
+  condition:
+    type: expression
+    expr: "get_amount('box_8_tax_exempt_interest', 0) > 0 and (get_amount('box_1_interest_income', 0) + get_amount('box_3_us_savings_bonds_and_treasury_interest', 0)) == 0"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields:
+    - "amounts.box_8_tax_exempt_interest"
+
+- id: INT_FOREIGN_TAX_WITHOUT_COUNTRY
+  form_types: ["1099-INT"]
+  name: Foreign tax reported without country
+  severity: warning
+  description: "Foreign tax is reported but foreign country/territory is blank."
+  condition:
+    type: expression
+    expr: "get_amount('box_6_foreign_tax_paid', 0) > 0 and missing(get('amounts.box_7_foreign_country_or_ust_possession', get('box_7_foreign_country_or_ust_possession', '')))"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields:
+    - "amounts.box_6_foreign_tax_paid"
+    - "amounts.box_7_foreign_country_or_ust_possession"
+
+- id: INT_COUNTRY_WITHOUT_FOREIGN_TAX
+  form_types: ["1099-INT"]
+  name: Foreign country provided without foreign tax
+  severity: info
+  description: "Foreign country/territory is provided but foreign tax paid is zero."
+  condition:
+    type: expression
+    expr: "get_amount('box_6_foreign_tax_paid', 0) <= 0 and not missing(get('amounts.box_7_foreign_country_or_ust_possession', get('box_7_foreign_country_or_ust_possession', '')))"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields:
+    - "amounts.box_6_foreign_tax_paid"
+    - "amounts.box_7_foreign_country_or_ust_possession"
+
+- id: INT_STATE_TAX_NONNEGATIVE
+  form_types: ["1099-INT"]
+  name: State tax cannot be negative
+  severity: error
+  description: "State tax withholding must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([si.get('state_tax_withheld', 0) for si in get('state_items', [])] or [0]) < 0"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields:
+    - "state_items[].state_tax_withheld"
+
+- id: INT_STATE_TAX_VS_INTEREST
+  form_types: ["1099-INT"]
+  name: State withholding exceeds interest income
+  severity: warning
+  description: "Total state withholding exceeds total interest income."
+  condition:
+    type: expression
+    expr: "sum([si.get('state_tax_withheld', 0) for si in get('state_items', [])]) > get_amount('box_1_interest_income', 0) + get_amount('box_3_us_savings_bonds_and_treasury_interest', 0) + get_amount('box_8_tax_exempt_interest', 0)"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields:
+    - "state_items[].state_tax_withheld"
+    - "amounts.box_1_interest_income"
+
+- id: INT_STATE_CODE_FORMAT
+  form_types: ["1099-INT"]
+  name: State code format invalid
+  severity: warning
+  description: "State code on state items is missing or not a valid two-character code."
+  condition:
+    type: expression
+    expr: "any((not si.get('state_code') or len(str(si.get('state_code')).strip()) != 2) for si in get('state_items', []))"
+  references:
+    - source: IRS 1099-INT Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-int
+  fields:
+    - "state_items[].state_code"

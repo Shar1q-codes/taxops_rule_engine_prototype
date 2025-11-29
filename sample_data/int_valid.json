@@ -1,0 +1,40 @@
+{
+  "doc_id": "int-valid-2024",
+  "doc_type": "1099-INT",
+  "tax_year": 2024,
+  "payer": {
+    "name": "First National Bank",
+    "tin": "12-3456789",
+    "address": "100 Main St, Denver, CO 80202"
+  },
+  "recipient": {
+    "name": "Alex Doe",
+    "tin": "123-45-6789",
+    "address": "200 Pine Ave, Denver, CO 80203"
+  },
+  "account_number": "ACC-1099-2024",
+  "amounts": {
+    "box_1_interest_income": 1000.0,
+    "box_2_early_withdrawal_penalty": 0.0,
+    "box_3_us_savings_bonds_and_treasury_interest": 0.0,
+    "box_4_federal_income_tax_withheld": 240.0,
+    "box_5_investment_expenses": 0.0,
+    "box_6_foreign_tax_paid": 0.0,
+    "box_8_tax_exempt_interest": 0.0,
+    "box_9_specified_private_activity_bond_interest": 0.0,
+    "box_10_market_discount": 0.0,
+    "box_11_bond_premium": 0.0
+  },
+  "state_items": [
+    {
+      "state_code": "CO",
+      "state_id_number": "CO-12345",
+      "state_tax_withheld": 50.0
+    }
+  ],
+  "ocr_quality": 0.98,
+  "meta": {
+    "source_pdf_path": "sample_data/1099int_valid.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

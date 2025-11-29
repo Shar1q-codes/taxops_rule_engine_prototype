@@ -1,0 +1,42 @@
+{
+  "doc_id": "misc-issues-2024",
+  "doc_type": "1099-MISC",
+  "tax_year": 2024,
+  "payer": {
+    "name": "",
+    "tin": "",
+    "address": ""
+  },
+  "recipient": {
+    "name": "",
+    "tin": "123",
+    "address": ""
+  },
+  "amounts": {
+    "box_1_rents": 0.0,
+    "box_2_royalties": -10.0,
+    "box_3_other_income": 2000.0,
+    "box_4_federal_income_tax_withheld": 1.0,
+    "box_6_medical_healthcare_payments": 5000.0,
+    "box_10_gross_proceeds_paid_to_attorney": 1500.0
+  },
+  "state_items": [
+    {
+      "state_code": "ZZZ",
+      "state_id_number": "ZZ-0000",
+      "state_tax_withheld": -20.0,
+      "state_income": 100.0
+    },
+    {
+      "state_code": "CA",
+      "state_id_number": "CA-0001",
+      "state_tax_withheld": 8000.0,
+      "state_income": 2000.0
+    }
+  ],
+  "ocr_quality": 0.7,
+  "meta": {
+    "source_pdf_path": "sample_data/misc_issues.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

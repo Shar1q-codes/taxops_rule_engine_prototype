@@ -1,0 +1,7 @@
+2010:
+  ss_rate: 0.062
+  ss_wage_base: 106800.00
+  medicare_rate: 0.0145
+  addl_medicare_rate: 0.0
+  medicare_threshold_s: 0
+  tolerance: 1.00

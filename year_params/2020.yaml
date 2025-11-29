@@ -1,0 +1,7 @@
+2020:
+  ss_rate: 0.062
+  ss_wage_base: 137700.00
+  medicare_rate: 0.0145
+  addl_medicare_rate: 0.009
+  medicare_threshold_s: 200000.00
+  tolerance: 1.00

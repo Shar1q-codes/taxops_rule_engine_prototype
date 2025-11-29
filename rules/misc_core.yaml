@@ -1,0 +1,261 @@
+- id: MISC_DOC_TYPE
+  form_types: ["1099-MISC"]
+  name: Incorrect document type
+  severity: error
+  description: "Document must be labeled as 1099-MISC."
+  condition:
+    type: expression
+    expr: "form_type != '1099-MISC'"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields: ["doc_type"]
+
+- id: MISC_PAYER_TIN_REQUIRED
+  form_types: ["1099-MISC"]
+  name: Payer TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Payer TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(payer_tin)"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields: ["payer.tin"]
+
+- id: MISC_PAYER_TIN_FORMAT
+  form_types: ["1099-MISC"]
+  name: Payer TIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Payer TIN must be a valid EIN format."
+  condition:
+    type: expression
+    expr: "not is_valid_ein(payer_tin)"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields: ["payer.tin"]
+
+- id: MISC_RECIPIENT_TIN_REQUIRED
+  form_types: ["1099-MISC"]
+  name: Recipient TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Recipient TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(recipient_tin)"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields: ["recipient.tin"]
+
+- id: MISC_RECIPIENT_TIN_FORMAT
+  form_types: ["1099-MISC"]
+  name: Recipient TIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Recipient TIN must be in valid SSN/EIN format."
+  condition:
+    type: expression
+    expr: "not (is_valid_ssn(recipient_tin) or is_valid_ein(recipient_tin))"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields: ["recipient.tin"]
+
+- id: MISC_AMOUNTS_NONNEGATIVE
+  form_types: ["1099-MISC"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Income and withholding amounts must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([get_amount(k, 0) for k in ['box_1_rents','box_2_royalties','box_3_other_income','box_4_federal_income_tax_withheld','box_6_medical_healthcare_payments','box_10_gross_proceeds_paid_to_attorney']] or [0]) < 0"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields:
+    - "amounts.box_1_rents"
+    - "amounts.box_2_royalties"
+    - "amounts.box_3_other_income"
+    - "amounts.box_4_federal_income_tax_withheld"
+    - "amounts.box_6_medical_healthcare_payments"
+    - "amounts.box_10_gross_proceeds_paid_to_attorney"
+
+- id: MISC_ZERO_DOCUMENT_SANITY
+  form_types: ["1099-MISC"]
+  name: All key amounts zero
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "All primary income/withholding amounts are zero; likely placeholder or extraction issue."
+  condition:
+    type: expression
+    expr: "sum([get_amount(k, 0) for k in ['box_1_rents','box_2_royalties','box_3_other_income','box_4_federal_income_tax_withheld','box_6_medical_healthcare_payments','box_10_gross_proceeds_paid_to_attorney']]) == 0"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields:
+    - "amounts.box_1_rents"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: MISC_RENTS_WITHHOLDING_SANITY
+  form_types: ["1099-MISC"]
+  name: Withholding present without rents
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Federal withholding is reported but rents (Box 1) are zero."
+  condition:
+    type: expression
+    expr: "get_amount('box_4_federal_income_tax_withheld', 0) > 0 and get_amount('box_1_rents', 0) <= 0"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields:
+    - "amounts.box_1_rents"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: MISC_WITHHOLDING_RATIO_SANITY
+  form_types: ["1099-MISC"]
+  name: Withholding ratio anomaly
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Federal withholding ratio is far outside a plausible band relative to total MISC income."
+  condition:
+    type: expression
+    expr: "(get_amount('box_1_rents', 0) + get_amount('box_2_royalties', 0) + get_amount('box_3_other_income', 0) + get_amount('box_6_medical_healthcare_payments', 0)) > 0 and get_amount('box_4_federal_income_tax_withheld', 0) > 0 and (get_amount('box_4_federal_income_tax_withheld', 0) / (get_amount('box_1_rents', 0) + get_amount('box_2_royalties', 0) + get_amount('box_3_other_income', 0) + get_amount('box_6_medical_healthcare_payments', 0)) < 0.05 or get_amount('box_4_federal_income_tax_withheld', 0) / (get_amount('box_1_rents', 0) + get_amount('box_2_royalties', 0) + get_amount('box_3_other_income', 0) + get_amount('box_6_medical_healthcare_payments', 0)) > 0.4)"
+  references:
+    - source: IRS Backup Withholding
+      url: https://www.irs.gov/businesses/small-businesses-self-employed/backup-withholding
+  fields:
+    - "amounts.box_1_rents"
+    - "amounts.box_2_royalties"
+    - "amounts.box_3_other_income"
+    - "amounts.box_6_medical_healthcare_payments"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: MISC_MEDICAL_PAYMENTS_TAX_RELATIONSHIP
+  form_types: ["1099-MISC"]
+  name: Medical/healthcare payments without withholding
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Medical/healthcare payments are reported but federal withholding is zero; review for backup withholding applicability."
+  condition:
+    type: expression
+    expr: "get_amount('box_6_medical_healthcare_payments', 0) > 0 and get_amount('box_4_federal_income_tax_withheld', 0) <= (0.01 * get_amount('box_6_medical_healthcare_payments', 0))"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields:
+    - "amounts.box_6_medical_healthcare_payments"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: MISC_OTHER_INCOME_PRESENTATION
+  form_types: ["1099-MISC"]
+  name: Other income with no withholding/state
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Large other income reported but no withholding and no state reporting; review for completeness."
+  condition:
+    type: expression
+    expr: "get_amount('box_3_other_income', 0) > 500 and get_amount('box_4_federal_income_tax_withheld', 0) <= 1"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields:
+    - "amounts.box_3_other_income"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: MISC_ATTORNEY_PAYMENTS_SANITY
+  form_types: ["1099-MISC"]
+  name: Attorney payments with weak recipient identity
+  severity: warning
+  category: "TIN/IDENTITY"
+  description: "Attorney gross proceeds reported without strong recipient identity/TIN; verify recipient info."
+  condition:
+    type: expression
+    expr: "get_amount('box_10_gross_proceeds_paid_to_attorney', 0) > 0 and (missing(recipient_tin) or missing(get('recipient.name', '')))"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields:
+    - "amounts.box_10_gross_proceeds_paid_to_attorney"
+    - "recipient.tin"
+
+- id: MISC_STATE_TAX_NONNEGATIVE
+  form_types: ["1099-MISC"]
+  name: State tax cannot be negative
+  severity: error
+  category: "STATE/LOCAL"
+  description: "State tax withholding must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([si.get('state_tax_withheld', 0) for si in get('state_items', [])] or [0]) < 0"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields:
+    - "state_items[].state_tax_withheld"
+
+- id: MISC_STATE_TAX_VS_INCOME_SANITY
+  form_types: ["1099-MISC"]
+  name: State withholding exceeds income
+  severity: warning
+  category: "STATE/LOCAL"
+  description: "Total state withholding exceeds reported MISC income; review for misreporting."
+  condition:
+    type: expression
+    expr: "sum([si.get('state_tax_withheld', 0) for si in get('state_items', [])]) > get_amount('box_1_rents', 0) + get_amount('box_2_royalties', 0) + get_amount('box_3_other_income', 0) + get_amount('box_6_medical_healthcare_payments', 0)"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields:
+    - "state_items[].state_tax_withheld"
+    - "amounts.box_1_rents"
+
+- id: MISC_STATE_CODE_FORMAT
+  form_types: ["1099-MISC"]
+  name: State code format invalid
+  severity: warning
+  category: "STATE/LOCAL"
+  description: "State code on state items is missing or not a valid two-character code."
+  condition:
+    type: expression
+    expr: "any((not si.get('state_code') or len(str(si.get('state_code')).strip()) != 2 or re_match(r'[^A-Za-z]{2}', str(si.get('state_code')).strip())) for si in get('state_items', []))"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields:
+    - "state_items[].state_code"
+
+- id: MISC_REQUIRED_PAYER_INFO
+  form_types: ["1099-MISC"]
+  name: Payer info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Payer name or address information is missing."
+  condition:
+    type: expression
+    expr: "missing(get('payer.name', ''))"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields: ["payer.name"]
+
+- id: MISC_REQUIRED_RECIPIENT_INFO
+  form_types: ["1099-MISC"]
+  name: Recipient info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Recipient name or address information is missing."
+  condition:
+    type: expression
+    expr: "missing(get('recipient.name', '')) or missing(get('recipient.address', ''))"
+  references:
+    - source: IRS 1099-MISC Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-misc
+  fields: ["recipient.name"]

@@ -1,0 +1,40 @@
+{
+  "doc_id": "int-issues-2005",
+  "doc_type": "1099-INT",
+  "tax_year": 2005,
+  "payer": {
+    "name": "Shady Bank LLC",
+    "tin": "99-999",
+    "address": "1 Nowhere Rd, Austin, TX 73301"
+  },
+  "recipient": {
+    "name": "Casey Smith",
+    "tin": "123",
+    "address": "2 Unknown St, Austin, TX 73301"
+  },
+  "account_number": "ACC-ISSUES-01",
+  "amounts": {
+    "box_1_interest_income": 500.0,
+    "box_2_early_withdrawal_penalty": -10.0,
+    "box_3_us_savings_bonds_and_treasury_interest": 0.0,
+    "box_4_federal_income_tax_withheld": 400.0,
+    "box_5_investment_expenses": 0.0,
+    "box_6_foreign_tax_paid": 0.0,
+    "box_8_tax_exempt_interest": 100.0,
+    "box_9_specified_private_activity_bond_interest": 200.0,
+    "box_10_market_discount": 0.0,
+    "box_11_bond_premium": 0.0
+  },
+  "state_items": [
+    {
+      "state_code": "TX",
+      "state_id_number": "TX-999",
+      "state_tax_withheld": 600.0
+    }
+  ],
+  "ocr_quality": 0.6,
+  "meta": {
+    "source_pdf_path": "sample_data/1099int_issues.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

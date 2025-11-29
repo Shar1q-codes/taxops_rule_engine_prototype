@@ -10,6 +10,10 @@ try:  # pragma: no cover - support running as script/module
     from .registry import RuleRegistry, build_default_registry
 except ImportError:  # pragma: no cover - fallback for direct execution
     from registry import RuleRegistry, build_default_registry
+try:  # pragma: no cover - support running as script/module
+    from .rules_metadata import get_rule_metadata
+except ImportError:  # pragma: no cover - fallback for direct execution
+    from rules_metadata import get_rule_metadata
 
 
 class RuleEngineError(Exception):
@@ -95,6 +99,42 @@ def _within_tolerance(actual: float, expected: float, tolerance: float) -> bool:
     return abs(actual - expected) <= tol
 
 
+def _make_finding(
+    *,
+    rule: Mapping[str, Any],
+    message: str,
+    form_type: str,
+    tax_year: Optional[int],
+    citations: List[Any],
+    fields: List[Any],
+    rule_source: Any,
+    condition: Any,
+) -> Dict[str, Any]:
+    severity = (rule.get("severity") or "warning").lower()
+    code = rule.get("id") or rule.get("code")
+    category = rule.get("category")
+    finding = {
+        "id": code,
+        "code": code,
+        "name": rule.get("name"),
+        "form_type": form_type,
+        "doc_type": form_type or "UNKNOWN",
+        "severity": severity,
+        "message": message,
+        "citations": citations,
+        "fields": fields,
+        "field_paths": list(fields) if isinstance(fields, list) else [],
+        "tax_year": tax_year,
+        "rule_source": rule_source,
+        "condition": condition,
+    }
+    if category:
+        finding["category"] = category
+    if "hint" in rule:
+        finding["hint"] = rule["hint"]
+    return finding
+
+
 class RuleEngine:
     """Evaluate YAML-defined rules against normalized tax documents."""
 
@@ -168,13 +208,17 @@ class RuleEngine:
         employer = document.get("employer") or {}
         employee = document.get("employee") or {}
         taxpayer = document.get("taxpayer") or employee
+        recipient = document.get("recipient") or {}
         flags = document.get("flags") or {}
         payer = document.get("payer") or document.get("payer_info") or document.get("payer_details") or {}
         supported_years = list(supported_years) if supported_years is not None else []
 
         wages_value = _as_number(amounts.get("wages", _get_path(document, "wages.wages_tips_other", 0)))
         federal_withholding = _as_number(
-            amounts.get("federal_withholding", _get_path(document, "wages.federal_income_tax_withheld", 0))
+            amounts.get(
+                "federal_withholding",
+                _get_path(document, "wages.federal_income_tax_withheld", _get_path(document, "amounts.box_4_federal_income_tax_withheld", 0)),
+            )
         )
         state_withholding = _as_number(
             amounts.get("state_withholding", _get_path(document, "state.state_tax_withheld", 0))
@@ -201,6 +245,7 @@ class RuleEngine:
             "employer": employer,
             "taxpayer": taxpayer,
             "employee": employee,
+            "recipient": recipient,
             "payer": payer,
             "flags": flags,
             # Scalar aliases
@@ -213,6 +258,8 @@ class RuleEngine:
             "medicare_tax": medicare_tax_val,
             "taxpayer_ssn": taxpayer.get("ssn"),
             "employee_ssn": employee.get("ssn"),
+            "recipient_tin": recipient.get("tin") or recipient.get("ssn"),
+            "recipient_ssn": recipient.get("ssn"),
             "employer_ein": employer.get("ein"),
             "employer_state": employer.get("state"),
             "payer_tin": payer.get("tin") or payer.get("ein"),
@@ -234,13 +281,22 @@ class RuleEngine:
             "max": max,
             "abs": abs,
             "round": round,
+            "sum": sum,
+            "len": len,
+            "str": str,
+            "int": int,
+            "float": float,
+            "any": any,
+            "all": all,
             "supported_years": supported_years,
         }
         return env
 
     def _evaluate_expr(self, expr: str, env: Dict[str, Any]) -> bool:
         try:
-            return bool(eval(expr, {"__builtins__": {}}, env))
+            safe_globals: Dict[str, Any] = {"__builtins__": {}}
+            safe_globals.update(env)
+            return bool(eval(expr, safe_globals, env))
         except Exception:
             return False
 
@@ -253,30 +309,21 @@ class RuleEngine:
     ) -> Dict[str, Any]:
         citations = rule.get("references") or []
         fields = rule.get("fields") or []
-        severity = (rule.get("severity") or "warning").lower()
         description = rule.get("description") or rule.get("name") or ""
         try:
             message = description.format(**env)
         except Exception:
             message = description
-
-        issue = {
-            "id": rule.get("id"),
-            "name": rule.get("name"),
-            "form_type": form_type,
-            "severity": severity,
-            "message": message,
-            "citations": citations,
-            "fields": fields,
-            "tax_year": tax_year,
-            "rule_source": rule.get("_source"),
-            "condition": rule.get("condition"),
-        }
-        if "hint" in rule:
-            issue["hint"] = rule["hint"]
-        if "category" in rule:
-            issue["category"] = rule["category"]
-        return issue
+        return _make_finding(
+            rule=rule,
+            message=message,
+            form_type=form_type,
+            tax_year=tax_year,
+            citations=citations,
+            fields=fields,
+            rule_source=rule.get("_source"),
+            condition=rule.get("condition"),
+        )
 
 
 # Initialize a singleton rule engine for application use.
