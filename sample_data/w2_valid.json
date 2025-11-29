@@ -10,6 +10,7 @@
   "employer": {
     "name": "Tech Corp LLC",
     "ein": "12-3456789",
+    "state": "CO",
     "address": "500 Market St, Denver, CO 80202"
   },
   "wages": {

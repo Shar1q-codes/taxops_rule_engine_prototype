@@ -43,15 +43,56 @@ def _re_match(pattern: str, value: Any) -> bool:
 
 
 def _is_valid_ssn(value: Any) -> bool:
-    return _re_match(r"^\d{3}-?\d{2}-?\d{4}$", value)
+    if value is None:
+        return False
+    ssn = str(value).strip()
+    if not re.fullmatch(r"\d{3}-\d{2}-\d{4}", ssn):
+        return False
+    area, group, serial = ssn.split("-")
+    if area in {"000", "666", "999"}:
+        return False
+    if group == "00" or serial == "0000":
+        return False
+    if ssn == "999-99-9999":
+        return False
+    return True
 
 
 def _is_valid_ein(value: Any) -> bool:
-    return _re_match(r"^\d{2}-?\d{7}$", value)
+    if value is None:
+        return False
+    raw = str(value).strip()
+    if not re.fullmatch(r"\d{2}-?\d{7}", raw):
+        return False
+    digits = raw.replace("-", "")
+    if not digits.isdigit() or len(digits) != 9:
+        return False
+    if digits == "000000000" or digits == "999999999":
+        return False
+    if digits[:2] in {"00", "99"}:
+        return False
+    return True
+
+
+def _plausible_ein_checksum(value: Any) -> bool:
+    """
+    Basic EIN heuristic check: rejects repeated digits placeholders.
+    This is intentionally lightweight and only used for warnings.
+    """
+    if not _is_valid_ein(value):
+        return False
+    digits = re.sub(r"\D", "", str(value))
+    if len(set(digits)) == 1:
+        return False
+    return True
 
 
 def _within_tolerance(actual: float, expected: float, tolerance: float) -> bool:
-    return abs(actual - expected) <= tolerance
+    try:
+        tol = float(tolerance)
+    except Exception:
+        tol = 0.0
+    return abs(actual - expected) <= tol
 
 
 class RuleEngine:
@@ -72,13 +113,24 @@ class RuleEngine:
 
         resolved_form = (form_type or document.get("doc_type") or document.get("form_type") or "").upper()
         resolved_year = tax_year or document.get("tax_year")
+        if isinstance(resolved_year, str):
+            try:
+                resolved_year = int(resolved_year)
+            except ValueError:
+                resolved_year = tax_year or document.get("tax_year")
         if not resolved_form:
             raise RuleEngineError("document missing doc_type/form_type")
 
         year_params = self.registry.get_year_params(resolved_year)
         rules = self.registry.get_rules(resolved_form)
 
-        env = self._build_environment(document, resolved_form, resolved_year, year_params)
+        env = self._build_environment(
+            document,
+            resolved_form,
+            resolved_year,
+            year_params,
+            supported_years=self.registry.supported_years,
+        )
 
         issues: List[Dict[str, Any]] = []
         for rule in rules:
@@ -109,12 +161,36 @@ class RuleEngine:
         form_type: str,
         tax_year: Optional[int],
         year_params: Mapping[str, Any],
+        *,
+        supported_years: Optional[List[int]] = None,
     ) -> Dict[str, Any]:
         amounts = document.get("amounts") or {}
         employer = document.get("employer") or {}
-        taxpayer = document.get("taxpayer") or {}
+        employee = document.get("employee") or {}
+        taxpayer = document.get("taxpayer") or employee
         flags = document.get("flags") or {}
         payer = document.get("payer") or document.get("payer_info") or document.get("payer_details") or {}
+        supported_years = list(supported_years) if supported_years is not None else []
+
+        wages_value = _as_number(amounts.get("wages", _get_path(document, "wages.wages_tips_other", 0)))
+        federal_withholding = _as_number(
+            amounts.get("federal_withholding", _get_path(document, "wages.federal_income_tax_withheld", 0))
+        )
+        state_withholding = _as_number(
+            amounts.get("state_withholding", _get_path(document, "state.state_tax_withheld", 0))
+        )
+        social_security_wages_val = _as_number(
+            amounts.get("social_security_wages", _get_path(document, "wages.social_security_wages", 0))
+        )
+        social_security_tax_val = _as_number(
+            amounts.get("social_security_tax", _get_path(document, "wages.social_security_tax_withheld", 0))
+        )
+        medicare_wages_val = _as_number(
+            amounts.get("medicare_wages", _get_path(document, "wages.medicare_wages", 0))
+        )
+        medicare_tax_val = _as_number(
+            amounts.get("medicare_tax", _get_path(document, "wages.medicare_tax_withheld", 0))
+        )
 
         env: Dict[str, Any] = {
             "doc": document,
@@ -124,17 +200,19 @@ class RuleEngine:
             "amounts": amounts,
             "employer": employer,
             "taxpayer": taxpayer,
+            "employee": employee,
             "payer": payer,
             "flags": flags,
             # Scalar aliases
-            "wages": _as_number(amounts.get("wages")),
-            "federal_withholding": _as_number(amounts.get("federal_withholding")),
-            "state_withholding": _as_number(amounts.get("state_withholding")),
-            "social_security_wages": _as_number(amounts.get("social_security_wages")),
-            "social_security_tax": _as_number(amounts.get("social_security_tax")),
-            "medicare_wages": _as_number(amounts.get("medicare_wages")),
-            "medicare_tax": _as_number(amounts.get("medicare_tax")),
+            "wages": wages_value,
+            "federal_withholding": federal_withholding,
+            "state_withholding": state_withholding,
+            "social_security_wages": social_security_wages_val,
+            "social_security_tax": social_security_tax_val,
+            "medicare_wages": medicare_wages_val,
+            "medicare_tax": medicare_tax_val,
             "taxpayer_ssn": taxpayer.get("ssn"),
+            "employee_ssn": employee.get("ssn"),
             "employer_ein": employer.get("ein"),
             "employer_state": employer.get("state"),
             "payer_tin": payer.get("tin") or payer.get("ein"),
@@ -149,12 +227,14 @@ class RuleEngine:
             "within_tolerance": _within_tolerance,
             "is_valid_ssn": _is_valid_ssn,
             "is_valid_ein": _is_valid_ein,
+            "ein_checksum_ok": _plausible_ein_checksum,
             "re_match": _re_match,
             "as_number": _as_number,
             "min": min,
             "max": max,
             "abs": abs,
             "round": round,
+            "supported_years": supported_years,
         }
         return env
 

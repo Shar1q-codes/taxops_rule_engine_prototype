@@ -81,6 +81,13 @@ def load_year_parameters(param_dir: Path | str | None = None) -> Dict[int, Dict[
         data = _load_yaml_file(path)
         if not isinstance(data, dict):
             raise ValueError(f"Year parameter file must be a mapping: {path}")
+        # Support either a flat mapping or a nested mapping keyed by the year.
+        if set(data.keys()) == {year}:
+            data = data[year]
+        elif set(data.keys()) == {str(year)}:
+            data = data[str(year)]
+        if not isinstance(data, dict):
+            raise ValueError(f"Year parameter file must map to a dict of values: {path}")
         params[year] = data
     if not params:
         raise ValueError(f"No year parameter files found in {directory}")

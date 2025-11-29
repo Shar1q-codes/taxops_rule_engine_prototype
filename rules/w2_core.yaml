@@ -2,7 +2,7 @@
   form_types: ["W2"]
   name: Taxpayer SSN format invalid
   severity: error
-  description: "Taxpayer SSN is missing or not in ###-##-#### format."
+  description: "Taxpayer SSN is missing or not in ###-##-#### format (no masking)."
   condition:
     type: expression
     expr: "not is_valid_ssn(taxpayer_ssn)"
@@ -15,7 +15,7 @@
   form_types: ["W2"]
   name: Employer EIN format invalid
   severity: error
-  description: "Employer EIN is missing or not in XX-XXXXXXX format."
+  description: "Employer EIN is missing or not in XX-XXXXXXX format with a valid prefix."
   condition:
     type: expression
     expr: "not is_valid_ein(employer_ein)"
@@ -44,7 +44,7 @@
   description: "Social Security tax {social_security_tax} should equal min(Social Security wages, wage base) x rate."
   condition:
     type: expression
-    expr: "not within_tolerance(social_security_tax, min(social_security_wages if social_security_wages else wages, year_params.get('ss_wage_base', 0)) * year_params.get('ss_rate', 0), year_params.get('tolerance', 1.0))"
+    expr: "not within_tolerance(get('wages.social_security_tax_withheld', social_security_tax), min(get('wages.social_security_wages', social_security_wages or get('wages.wages_tips_other', wages)), year_params.get('ss_wage_base', 0)) * year_params.get('ss_rate', 0), year_params.get('tolerance', 1.0))"
   references:
     - source: IRS Pub. 15
       url: https://www.irs.gov/publications/p15
@@ -57,7 +57,7 @@
   description: "Medicare tax {medicare_tax} should equal Medicare wages x base rate plus Additional Medicare above the threshold."
   condition:
     type: expression
-    expr: "not within_tolerance(medicare_tax, medicare_wages * year_params.get('medicare_rate', 0) + max(medicare_wages - year_params.get('medicare_threshold_s', 0), 0) * year_params.get('addl_medicare_rate', 0), year_params.get('tolerance', 1.0))"
+    expr: "not within_tolerance(get('wages.medicare_tax_withheld', medicare_tax), get('wages.medicare_wages', medicare_wages or get('wages.wages_tips_other', 0)) * year_params.get('medicare_rate', 0) + max(get('wages.medicare_wages', medicare_wages or get('wages.wages_tips_other', 0)) - year_params.get('medicare_threshold_s', 0), 0) * year_params.get('addl_medicare_rate', 0), year_params.get('tolerance', 1.0))"
   references:
     - source: IRS Pub. 15
       url: https://www.irs.gov/publications/p15
@@ -187,7 +187,7 @@
   description: "Box 1 wages differ materially from Social Security or Medicare wages; verify pre-tax deductions and coding."
   condition:
     type: expression
-    expr: "abs(get('wages.wages_tips_other', 0) - get('wages.social_security_wages', 0)) > year_params.get('tolerance', 1.0) or abs(get('wages.wages_tips_other', 0) - get('wages.medicare_wages', 0)) > year_params.get('tolerance', 1.0)"
+    expr: "get('wages.wages_tips_other', 0) > 0 and (abs(get('wages.wages_tips_other', 0) - get('wages.social_security_wages', 0)) > year_params.get('tolerance', 1.0) or abs(get('wages.wages_tips_other', 0) - get('wages.medicare_wages', 0)) > year_params.get('tolerance', 1.0))"
   references:
     - source: IRS General Instructions for Forms W-2 and W-3
       url: https://www.irs.gov/pub/irs-pdf/iw2w3.pdf
@@ -226,7 +226,7 @@
   description: "Tax year on the document is not supported by configured parameters."
   condition:
     type: expression
-    expr: "tax_year is None or tax_year not in year_params"
+    expr: "tax_year is None or tax_year not in supported_years"
   references:
     - source: IRS General Instructions for Forms W-2 and W-3
       url: https://www.irs.gov/pub/irs-pdf/iw2w3.pdf
@@ -235,11 +235,11 @@
 - id: W2_EIN_VALID_CHECKSUM
   form_types: ["W2"]
   name: Employer EIN fails format validation
-  severity: error
+  severity: warning
   description: "Employer EIN fails checksum/format validation; verify against IRS-assigned EIN."
   condition:
     type: expression
-    expr: "not is_valid_ein(employer_ein)"
+    expr: "not ein_checksum_ok(employer_ein)"
   references:
     - source: IRS General Instructions for Forms W-2 and W-3
       url: https://www.irs.gov/pub/irs-pdf/iw2w3.pdf

@@ -23,18 +23,21 @@ from PyPDF2 import PdfReader
 
 logger = logging.getLogger(__name__)
 
-
 def safe_float(val: Any, default: float = 0.0) -> float:
     """Parse a float safely, stripping commas and handling empty values."""
     if val is None:
         return float(default)
     try:
         if isinstance(val, str):
-            val = val.replace(",", "").strip()
-            if not val:
+            cleaned = val.replace("$", "").replace(",", "").strip()
+            if cleaned.startswith("(") and cleaned.endswith(")"):
+                cleaned = f"-{cleaned[1:-1].strip()}"
+            if not cleaned:
                 return float(default)
+            val = cleaned
         return float(val)
     except Exception:
+        logger.warning("Failed to parse numeric value %r; defaulting to %s", val, default)
         return float(default)
 
 
@@ -102,13 +105,14 @@ def extract_structured_fields(text: str) -> Dict[str, Any]:
     fields: Dict[str, Any] = {}
     ssn_match = re.search(r"\b(\d{3}-\d{2}-\d{4})\b", text)
     ein_match = re.search(r"\b(\d{2}-\d{7})\b", text)
-    year_match = re.search(r"\b(20\d{2})\b", text)
+    year_matches = re.findall(r"\b(20\d{2})\b", text)
     if ssn_match:
         fields["employee"] = {"ssn": ssn_match.group(1)}
     if ein_match:
         fields.setdefault("employer", {})["ein"] = ein_match.group(1)
-    if year_match:
-        fields["tax_year"] = int(year_match.group(1))
+    if year_matches:
+        fields["detected_years"] = [int(y) for y in year_matches]
+        fields["tax_year"] = int(year_matches[0])
     return fields
 
 
@@ -159,15 +163,7 @@ def map_w2_fields_from_form(form_fields: Dict[str, Any]) -> Dict[str, Any]:
     ein = get_first("EmployerEIN", "EIN", "EmpEIN", "f1_2", "EIN_1")
 
     def parse_float(val: Any) -> float:
-        if val is None:
-            return 0.0
-        s = str(val).replace("$", "").replace(",", "").strip()
-        if not s:
-            return 0.0
-        try:
-            return float(s)
-        except ValueError:
-            return 0.0
+        return safe_float(val, 0.0)
 
     wages_box1 = parse_float(get_first("WagesTipsOther", "Wages_Tips", "Box1", "W2_Box1"))
     fit_box2 = parse_float(get_first("FedIncomeTaxWithheld", "Box2", "W2_Box2"))
@@ -214,6 +210,7 @@ def map_w2_fields_from_form(form_fields: Dict[str, Any]) -> Dict[str, Any]:
         },
         "tax_year": tax_year,
     }
+
 def extract_box_value(text: str, label: str) -> float:
     """Extract numeric value following a W-2 box label."""
     pattern = rf"{re.escape(label)}\s*[:\-]?\s*\$?([\d,]+(?:\.\d+)?)"
@@ -328,6 +325,35 @@ def _extract_wage_boxes(text: str) -> Dict[str, float]:
     return results
 
 
+def _fallback_numeric_by_keyword(text: str, keyword: str) -> float:
+    pattern = rf"{keyword}.*?\$?([\d,]+(?:\.\d+)?)"
+    match = re.search(pattern, text, flags=re.IGNORECASE | re.DOTALL)
+    if match:
+        return safe_float(match.group(1), 0.0)
+    return 0.0
+
+
+def _apply_fallback_amounts(doc: Dict[str, Any], text: str) -> None:
+    wages = doc.get("wages") or {}
+    mappings = {
+        "wages_tips_other": ["wages", "wages tips", "box 1"],
+        "federal_income_tax_withheld": ["federal income tax", "federal withholding", "box 2"],
+        "social_security_wages": ["social security wages", "box 3"],
+        "social_security_tax_withheld": ["social security tax", "box 4"],
+        "medicare_wages": ["medicare wages", "box 5"],
+        "medicare_tax_withheld": ["medicare tax", "box 6"],
+    }
+    for field, keywords in mappings.items():
+        if safe_float(wages.get(field), 0.0) > 0.0:
+            continue
+        for kw in keywords:
+            val = _fallback_numeric_by_keyword(text, kw)
+            if val > 0:
+                wages[field] = val
+                break
+    doc["wages"] = wages
+
+
 def _populate_wages_from_text(doc: Dict[str, Any], text: str) -> None:
     values = _extract_wage_boxes(text)
     for dotted, val in values.items():
@@ -351,19 +377,29 @@ def _wages_missing(doc: Dict[str, Any]) -> bool:
 
 
 def _log_missing_fields(doc: Dict[str, Any]) -> None:
-    checks = [
-        ("wages.wages_tips_other", doc.get("wages", {}).get("wages_tips_other")),
-        ("wages.federal_income_tax_withheld", doc.get("wages", {}).get("federal_income_tax_withheld")),
-        ("wages.social_security_wages", doc.get("wages", {}).get("social_security_wages")),
-        ("wages.social_security_tax_withheld", doc.get("wages", {}).get("social_security_tax_withheld")),
-        ("wages.medicare_wages", doc.get("wages", {}).get("medicare_wages")),
-        ("wages.medicare_tax_withheld", doc.get("wages", {}).get("medicare_tax_withheld")),
-        ("state.state_wages", doc.get("state", {}).get("state_wages")),
-        ("state.state_tax_withheld", doc.get("state", {}).get("state_tax_withheld")),
-    ]
-    for field, value in checks:
-        if safe_float(value, 0.0) <= 0.0:
-            logger.warning("Missing field: %s", field)
+    wages = doc.get("wages") or {}
+    state = doc.get("state") or {}
+    wages_present = safe_float(wages.get("wages_tips_other"), 0.0) > 0.0
+    if wages_present:
+        checks = [
+            ("wages.federal_income_tax_withheld", wages.get("federal_income_tax_withheld")),
+            ("wages.social_security_wages", wages.get("social_security_wages")),
+            ("wages.social_security_tax_withheld", wages.get("social_security_tax_withheld")),
+            ("wages.medicare_wages", wages.get("medicare_wages")),
+            ("wages.medicare_tax_withheld", wages.get("medicare_tax_withheld")),
+        ]
+        for field, value in checks:
+            if safe_float(value, 0.0) <= 0.0:
+                logger.warning("Missing field: %s", field)
+
+    state_code = state.get("state_code") or ""
+    if state_code.strip():
+        for field, value in [
+            ("state.state_wages", state.get("state_wages")),
+            ("state.state_tax_withheld", state.get("state_tax_withheld")),
+        ]:
+            if safe_float(value, 0.0) <= 0.0:
+                logger.warning("Missing field: %s", field)
 
 
 def _merge_form_mapping(doc: Dict[str, Any], mapped: Dict[str, Any]) -> None:
@@ -406,6 +442,7 @@ def parse_w2_from_text(doc_id: str, text: str, used_ocr: bool) -> Dict[str, Any]
     extracted = extract_structured_fields(text)
     _apply_extracted_fields(doc, extracted)
     _populate_wages_from_text(doc, text)
+    _apply_fallback_amounts(doc, text)
     doc["ocr_quality"] = _assign_ocr_quality(text, used_ocr)
     return doc
 
@@ -436,19 +473,32 @@ def parse_document(path: str | Path) -> Dict[str, Any]:
 
     if p.suffix.lower() == ".pdf":
         pdf_bytes = p.read_bytes()
-        text, used_ocr = extract_text_from_pdf(p)
         doc_id = p.stem or uuid.uuid4().hex
-        doc = parse_w2_from_text(doc_id, text, used_ocr)
+        doc = _blank_w2(doc_id)
+
         form_fields = extract_acroform_fields(pdf_bytes)
         if form_fields:
-            logger.info("AcroForm fields detected: %d", len(form_fields))
+            logger.info("AcroForm fields detected for %s: %d", doc_id, len(form_fields))
             mapped = map_w2_fields_from_form(form_fields)
             _merge_form_mapping(doc, mapped)
+
+        text, used_ocr = extract_text_from_pdf(p)
+        text_doc = parse_w2_from_text(doc_id, text, used_ocr)
+        doc = _merge_docs(doc, text_doc)
+        doc["ocr_quality"] = min(doc.get("ocr_quality", 1.0), text_doc.get("ocr_quality", 1.0))
+        if used_ocr:
+            logger.info("Primary PDF extraction for %s relied on OCR fallback", doc_id)
+
         if _wages_missing(doc) and not used_ocr:
+            logger.info("OCR fallback triggered for %s due to missing wage/tax fields", doc_id)
             ocr_text = _force_pdf_ocr(p)
             if ocr_text:
                 ocr_doc = parse_w2_from_text(doc_id, ocr_text, used_ocr=True)
-                doc = _merge_docs(ocr_doc, doc)
+                doc = _merge_docs(doc, ocr_doc)
+                doc["ocr_quality"] = min(doc.get("ocr_quality", 1.0), ocr_doc.get("ocr_quality", 1.0))
+
+        if _wages_missing(doc):
+            logger.warning("W-2 extraction incomplete for %s; key wage/tax fields still missing", doc_id)
         _log_missing_fields(doc)
         doc["meta"] = {"source_file": p.name}
         return doc
@@ -477,19 +527,31 @@ def parse_document_bytes(filename: str, data: bytes) -> Dict[str, Any]:
         return doc
 
     if suffix == ".pdf":
-        text, used_ocr = extract_text_from_pdf(BytesIO(data))
         doc_id = Path(filename).stem or uuid.uuid4().hex
-        doc = parse_w2_from_text(doc_id, text, used_ocr)
+        doc = _blank_w2(doc_id)
         form_fields = extract_acroform_fields(data)
         if form_fields:
-            logger.info("AcroForm fields detected: %d", len(form_fields))
+            logger.info("AcroForm fields detected for %s: %d", doc_id, len(form_fields))
             mapped = map_w2_fields_from_form(form_fields)
             _merge_form_mapping(doc, mapped)
+
+        text, used_ocr = extract_text_from_pdf(BytesIO(data))
+        text_doc = parse_w2_from_text(doc_id, text, used_ocr)
+        doc = _merge_docs(doc, text_doc)
+        doc["ocr_quality"] = min(doc.get("ocr_quality", 1.0), text_doc.get("ocr_quality", 1.0))
+        if used_ocr:
+            logger.info("Primary PDF extraction for %s relied on OCR fallback", doc_id)
+
         if _wages_missing(doc) and not used_ocr:
+            logger.info("OCR fallback triggered for %s due to missing wage/tax fields", doc_id)
             ocr_text = _force_pdf_ocr(BytesIO(data))
             if ocr_text:
                 ocr_doc = parse_w2_from_text(doc_id, ocr_text, used_ocr=True)
-                doc = _merge_docs(ocr_doc, doc)
+                doc = _merge_docs(doc, ocr_doc)
+                doc["ocr_quality"] = min(doc.get("ocr_quality", 1.0), ocr_doc.get("ocr_quality", 1.0))
+
+        if _wages_missing(doc):
+            logger.warning("W-2 extraction incomplete for %s; key wage/tax fields still missing", doc_id)
         _log_missing_fields(doc)
         doc["meta"] = {"source_file": filename}
         return doc

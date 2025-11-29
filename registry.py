@@ -10,6 +10,10 @@ try:  # pragma: no cover - allow running as script/module
 except ImportError:  # pragma: no cover - fallback for direct execution
     from loader import load_all_rules, load_year_parameters
 
+try:
+    from .rules import w2_rules_v2
+except Exception:  # pragma: no cover - optional extension
+    w2_rules_v2 = None  # type: ignore
 
 YEAR_PARAMS = load_year_parameters()
 
@@ -17,7 +21,7 @@ YEAR_PARAMS = load_year_parameters()
 def get_year_params(year: int) -> Mapping[str, Any]:
     if year in YEAR_PARAMS:
         params = dict(YEAR_PARAMS[year])
-        params[year] = True  # marker so membership checks like 'tax_year in year_params' succeed
+        params["_year"] = year
         return params
     return {}
 
@@ -30,7 +34,10 @@ class RuleRegistry:
         rules: Iterable[Mapping[str, Any]] | None = None,
         year_parameters: Mapping[int, Mapping[str, Any]] | None = None,
     ) -> None:
-        self._all_rules = list(rules) if rules is not None else load_all_rules()
+        base_rules = list(rules) if rules is not None else load_all_rules()
+        if w2_rules_v2 and hasattr(w2_rules_v2, "RULES"):
+            base_rules.extend(getattr(w2_rules_v2, "RULES"))
+        self._all_rules = base_rules
         self._year_params = dict(year_parameters) if year_parameters is not None else YEAR_PARAMS
         self._rules_by_form: DefaultDict[str, List[Mapping[str, Any]]] = defaultdict(list)
         self._build_index()
