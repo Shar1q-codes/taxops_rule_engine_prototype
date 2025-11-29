@@ -103,6 +103,11 @@ def health() -> Dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/")
+async def root() -> Dict[str, str]:
+    return {"service": "corallo-taxops-backend", "status": "ok"}
+
+
 @app.post("/audit-document")
 async def audit_document_endpoint(
     file: UploadFile = File(...),
