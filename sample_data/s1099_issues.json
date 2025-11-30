@@ -1,0 +1,35 @@
+{
+  "doc_id": "s1099-issues-2035",
+  "doc_type": "1099-S",
+  "tax_year": 2035,
+  "filer": {
+    "name": "Unknown Filer",
+    "tin": "",
+    "address": ""
+  },
+  "transferor": {
+    "name": "Placeholder Transferor",
+    "tin": "",
+    "address": ""
+  },
+  "account_number": "",
+  "property_address": "400 Unknown Blvd, City, ZZ 00000",
+  "property_desc": "",
+  "amounts": {
+    "box1_gross_proceeds": 1000.0,
+    "box4_federal_income_tax_withheld": 2000.0,
+    "federal_withholding": 2000.0
+  },
+  "box2_property_or_services": false,
+  "box3_recipient_is_transferor": false,
+  "box5_transferor_is_foreign": false,
+  "closing_date": "",
+  "state_tax_withheld": [1000.0, -500.0],
+  "state_id": ["CA"],
+  "state_income": [50000.0, 60000.0, 70000.0],
+  "ocr_quality": 0.6,
+  "meta": {
+    "source_pdf_path": "sample_data/s1099_issues.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

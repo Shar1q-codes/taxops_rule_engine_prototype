@@ -1,0 +1,52 @@
+{
+  "doc_id": "r1099-valid-2024",
+  "doc_type": "1099-R",
+  "tax_year": 2024,
+  "payer": {
+    "name": "Retirement Payer Inc",
+    "tin": "98-7654321",
+    "address": "100 Payer Lane, City, ST 00000"
+  },
+  "recipient": {
+    "name": "John Doe",
+    "tin": "123-45-6789",
+    "address": "200 Recipient Rd, Town, ST 11111"
+  },
+  "account_number": "ACCT-1099R-001",
+  "amounts": {
+    "box_1_gross_distribution": 50000.0,
+    "box_2a_taxable_amount": 40000.0,
+    "box_3_capital_gain_included": 0.0,
+    "box_4_federal_income_tax_withheld": 5000.0,
+    "box_5_employee_contributions_or_insurance_premiums": 1000.0,
+    "box_6_net_unrealized_appreciation": 0.0,
+    "box_8_other": 0.0,
+    "box_9a_total_distribution_pct": 100.0,
+    "box_9b_total_employee_contributions": 2000.0,
+    "box_10_amount_allocable_to_IRR": 0.0,
+    "federal_withholding": 5000.0
+  },
+  "box_2b_taxable_amount_not_determined": false,
+  "box_2b_total_distribution": true,
+  "box_7_distribution_code": "7",
+  "box_7_distribution_codes": ["7"],
+  "box_7_ira_sep_simple_indicator": false,
+  "box_11_first_year_designated_roth": null,
+  "box_12_fatca_filing_requirement": false,
+  "box_13_date_of_payment": "2024-12-31",
+  "box_14_state_tax_withheld": [1500.0],
+  "box_15_state_id": ["CA"],
+  "box_16_state_distribution": [50000.0],
+  "state_items": [
+    {
+      "state_code": "CA",
+      "state_tax_withheld": 1500.0,
+      "state_distribution_amount": 50000.0
+    }
+  ],
+  "ocr_quality": 1.0,
+  "meta": {
+    "source_pdf_path": "sample_data/r1099_valid.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

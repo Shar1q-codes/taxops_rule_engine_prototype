@@ -1,0 +1,52 @@
+{
+  "doc_id": "r1099-issues-2035",
+  "doc_type": "1099-R",
+  "tax_year": 2035,
+  "payer": {
+    "name": "",
+    "tin": "",
+    "address": ""
+  },
+  "recipient": {
+    "name": "Recipient Missing TIN",
+    "tin": "",
+    "address": ""
+  },
+  "account_number": "",
+  "amounts": {
+    "box_1_gross_distribution": 10000.0,
+    "box_2a_taxable_amount": 15000.0,
+    "box_3_capital_gain_included": -10.0,
+    "box_4_federal_income_tax_withheld": -5.0,
+    "box_5_employee_contributions_or_insurance_premiums": -100.0,
+    "box_6_net_unrealized_appreciation": -20.0,
+    "box_8_other": -1.0,
+    "box_9a_total_distribution_pct": 50.0,
+    "box_9b_total_employee_contributions": -200.0,
+    "box_10_amount_allocable_to_IRR": -50.0,
+    "federal_withholding": -5.0
+  },
+  "box_2b_taxable_amount_not_determined": false,
+  "box_2b_total_distribution": true,
+  "box_7_distribution_code": "",
+  "box_7_distribution_codes": [],
+  "box_7_ira_sep_simple_indicator": false,
+  "box_11_first_year_designated_roth": null,
+  "box_12_fatca_filing_requirement": false,
+  "box_13_date_of_payment": "",
+  "box_14_state_tax_withheld": [-10.0],
+  "box_15_state_id": ["ZZ"],
+  "box_16_state_distribution": [0.0],
+  "state_items": [
+    {
+      "state_code": "ZZ",
+      "state_tax_withheld": -10.0,
+      "state_distribution_amount": 0.0
+    }
+  ],
+  "ocr_quality": 0.7,
+  "meta": {
+    "source_pdf_path": "sample_data/r1099_issues.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

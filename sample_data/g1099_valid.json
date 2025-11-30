@@ -1,0 +1,35 @@
+{
+  "doc_id": "g1099-valid-2024",
+  "doc_type": "1099-G",
+  "tax_year": 2024,
+  "payer": {
+    "name": "State Tax Agency",
+    "tin": "12-3456789",
+    "address": "100 Capital Ave, City, ST 00000"
+  },
+  "recipient": {
+    "name": "Taylor Taxpayer",
+    "tin": "123-45-6789",
+    "address": "200 Main St, Town, ST 11111"
+  },
+  "account_number": "ACCT-G-001",
+  "amounts": {
+    "box1_unemployment_compensation": 8000.0,
+    "box2_state_local_tax_refunds": 1200.0,
+    "box4_federal_income_tax_withheld": 1000.0,
+    "box5_rtaa_payments": 0.0,
+    "box6_taxable_grants": 500.0,
+    "box7_agricultural_payments": 0.0,
+    "box9_market_gain": 0.0
+  },
+  "box3_box2_tax_year": 2023,
+  "box8_trade_or_business_indicator": true,
+  "box10_state_tax_withheld": [300.0],
+  "box11_state_id": ["CA"],
+  "box12_state_income": [9200.0],
+  "ocr_quality": 1.0,
+  "meta": {
+    "source_pdf_path": "sample_data/g1099_valid.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

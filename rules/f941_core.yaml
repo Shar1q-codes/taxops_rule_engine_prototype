@@ -1,0 +1,245 @@
+- id: F941_EMPLOYER_EIN_REQUIRED
+  form_types: ["941"]
+  name: Employer EIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Employer EIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(employer_ein)"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields: ["employer.ein"]
+
+- id: F941_EMPLOYER_EIN_FORMAT
+  form_types: ["941"]
+  name: Employer EIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Employer EIN must be a valid EIN format."
+  condition:
+    type: expression
+    expr: "not is_valid_ein(employer_ein)"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields: ["employer.ein"]
+
+- id: F941_REQUIRED_EMPLOYER_INFO
+  form_types: ["941"]
+  name: Employer info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Employer name or address is missing."
+  condition:
+    type: expression
+    expr: "missing(get('employer.name', '')) or missing(get('employer.address', ''))"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields: ["employer.name"]
+
+- id: F941_TAX_YEAR_AND_QUARTER_REQUIRED
+  form_types: ["941"]
+  name: Tax year/quarter missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Tax year and quarter must be provided."
+  condition:
+    type: expression
+    expr: "tax_year is None or tax_quarter is None or tax_quarter not in [1,2,3,4]"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields: ["tax_year", "tax_quarter"]
+
+- id: F941_AMOUNTS_NONNEGATIVE
+  form_types: ["941"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Core wage and tax amounts must be zero or positive (adjustment lines may be negative)."
+  condition:
+    type: expression
+    expr: "min([get_amount(k, 0) for k in ['line_1_num_employees','line_2_wages_tips_other_comp','line_3_income_tax_withheld','line_5a_taxable_ss_wages','line_5a_ss_tax','line_5b_taxable_ss_tips','line_5b_ss_tax_tips','line_5c_taxable_medicare_wages','line_5c_medicare_tax','line_5d_taxable_addl_medicare_wages','line_5d_addl_medicare_tax','line_6_total_taxes_before_adjustments','line_10_total_taxes_after_adjustments','line_11_total_deposits_for_quarter','line_12_refundable_credits','line_13_total_taxes_after_credits','line_14_balance_due','line_15_overpayment']] or [0]) < 0"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields:
+    - "amounts.line_2_wages_tips_other_comp"
+    - "amounts.line_5a_taxable_ss_wages"
+    - "amounts.line_5c_taxable_medicare_wages"
+
+- id: F941_SS_TAX_RATE_CONSISTENCY
+  form_types: ["941"]
+  name: Social Security tax inconsistent with wages
+  severity: error
+  category: "MATH/CONSISTENCY"
+  description: "Social Security tax should match taxable SS wages times the combined rate within tolerance."
+  condition:
+    type: expression
+    expr: "abs(get_amount('line_5a_ss_tax', 0) - get_amount('line_5a_taxable_ss_wages', 0) * (year_params.get('ss_rate', 0) * 2)) > year_params.get('tolerance', 1.0)"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields:
+    - "amounts.line_5a_taxable_ss_wages"
+    - "amounts.line_5a_ss_tax"
+
+- id: F941_SS_TIPS_TAX_RATE_CONSISTENCY
+  form_types: ["941"]
+  name: Social Security tax on tips inconsistent
+  severity: error
+  category: "MATH/CONSISTENCY"
+  description: "Social Security tax on tips should match taxable tips times the combined rate within tolerance."
+  condition:
+    type: expression
+    expr: "abs(get_amount('line_5b_ss_tax_tips', 0) - get_amount('line_5b_taxable_ss_tips', 0) * (year_params.get('ss_rate', 0) * 2)) > year_params.get('tolerance', 1.0)"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields:
+    - "amounts.line_5b_taxable_ss_tips"
+    - "amounts.line_5b_ss_tax_tips"
+
+- id: F941_MEDICARE_TAX_RATE_CONSISTENCY
+  form_types: ["941"]
+  name: Medicare tax inconsistent with wages
+  severity: error
+  category: "MATH/CONSISTENCY"
+  description: "Medicare tax should match taxable Medicare wages times the combined rate within tolerance."
+  condition:
+    type: expression
+    expr: "abs(get_amount('line_5c_medicare_tax', 0) - get_amount('line_5c_taxable_medicare_wages', 0) * (year_params.get('medicare_rate', 0) * 2)) > year_params.get('tolerance', 1.0)"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields:
+    - "amounts.line_5c_taxable_medicare_wages"
+    - "amounts.line_5c_medicare_tax"
+
+- id: F941_ADDL_MEDICARE_TAX_CONSISTENCY
+  form_types: ["941"]
+  name: Additional Medicare tax inconsistent
+  severity: warning
+  category: "MATH/CONSISTENCY"
+  description: "Additional Medicare tax should match taxable additional Medicare wages times the employee rate within tolerance."
+  condition:
+    type: expression
+    expr: "abs(get_amount('line_5d_addl_medicare_tax', 0) - get_amount('line_5d_taxable_addl_medicare_wages', 0) * year_params.get('addl_medicare_rate', 0)) > year_params.get('tolerance', 1.0)"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields:
+    - "amounts.line_5d_taxable_addl_medicare_wages"
+    - "amounts.line_5d_addl_medicare_tax"
+
+- id: F941_TOTAL_TAXES_AFTER_ADJUSTMENTS_CONSISTENCY
+  form_types: ["941"]
+  name: Total taxes after adjustments inconsistent
+  severity: error
+  category: "MATH/CONSISTENCY"
+  description: "Total taxes after adjustments should equal taxes before adjustments plus adjustments within tolerance."
+  condition:
+    type: expression
+    expr: "abs(get_amount('line_10_total_taxes_after_adjustments', 0) - (get_amount('line_6_total_taxes_before_adjustments', 0) + get_amount('line_7_current_quarter_fractions_of_cents_adjustment', 0) + get_amount('line_8_tip_adjustment', 0) + get_amount('line_9_sick_pay_adjustment', 0))) > year_params.get('tolerance', 1.0)"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields:
+    - "amounts.line_10_total_taxes_after_adjustments"
+
+- id: F941_TOTAL_TAXES_AFTER_CREDITS_CONSISTENCY
+  form_types: ["941"]
+  name: Total taxes after credits inconsistent
+  severity: error
+  category: "MATH/CONSISTENCY"
+  description: "Total taxes after credits should equal total taxes after adjustments minus refundable credits within tolerance."
+  condition:
+    type: expression
+    expr: "abs(get_amount('line_13_total_taxes_after_credits', 0) - (get_amount('line_10_total_taxes_after_adjustments', 0) - get_amount('line_12_refundable_credits', 0))) > year_params.get('tolerance', 1.0)"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields:
+    - "amounts.line_13_total_taxes_after_credits"
+
+- id: F941_BALANCE_DUE_VS_OVERPAYMENT_EXCLUSIVITY
+  form_types: ["941"]
+  name: Balance due and overpayment both present
+  severity: error
+  category: "MATH/CONSISTENCY"
+  description: "Balance due and overpayment cannot both be positive."
+  condition:
+    type: expression
+    expr: "get_amount('line_14_balance_due', 0) > 0 and get_amount('line_15_overpayment', 0) > 0"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields:
+    - "amounts.line_14_balance_due"
+    - "amounts.line_15_overpayment"
+
+- id: F941_BALANCE_DUE_COMPUTATION
+  form_types: ["941"]
+  name: Balance due computation mismatch
+  severity: warning
+  category: "MATH/CONSISTENCY"
+  description: "Balance due should roughly equal total taxes after credits minus deposits when positive."
+  condition:
+    type: expression
+    expr: "get_amount('line_14_balance_due', 0) > 0 and abs(get_amount('line_14_balance_due', 0) - (get_amount('line_13_total_taxes_after_credits', 0) - get_amount('line_11_total_deposits_for_quarter', 0))) > year_params.get('tolerance', 1.0)"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields:
+    - "amounts.line_14_balance_due"
+
+- id: F941_OVERPAYMENT_COMPUTATION
+  form_types: ["941"]
+  name: Overpayment computation mismatch
+  severity: warning
+  category: "MATH/CONSISTENCY"
+  description: "Overpayment should roughly equal deposits minus total taxes after credits when positive."
+  condition:
+    type: expression
+    expr: "get_amount('line_15_overpayment', 0) > 0 and abs(get_amount('line_15_overpayment', 0) - (get_amount('line_11_total_deposits_for_quarter', 0) - get_amount('line_13_total_taxes_after_credits', 0))) > year_params.get('tolerance', 1.0)"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields:
+    - "amounts.line_15_overpayment"
+
+- id: F941_EMPLOYEE_COUNT_VS_WAGES_SANITY
+  form_types: ["941"]
+  name: Employee count vs wages sanity
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Employee count and wages appear inconsistent (wages extremely low or high for the reported employees)."
+  condition:
+    type: expression
+    expr: "get_amount('line_1_num_employees', 0) > 0 and (get_amount('line_2_wages_tips_other_comp', 0) / max(get_amount('line_1_num_employees', 0), 1) < 500 or get_amount('line_2_wages_tips_other_comp', 0) / max(get_amount('line_1_num_employees', 0), 1) > 500000)"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields:
+    - "amounts.line_1_num_employees"
+    - "amounts.line_2_wages_tips_other_comp"
+
+- id: F941_WAGES_VS_FICA_BASE_SANITY
+  form_types: ["941"]
+  name: SS wages exceed expected base
+  severity: warning
+  category: "MATH/CONSISTENCY"
+  description: "Social Security wages greatly exceed wage base times employee count; review for data issues."
+  condition:
+    type: expression
+    expr: "get_amount('line_5a_taxable_ss_wages', 0) > (year_params.get('ss_wage_base', 0) * max(get_amount('line_1_num_employees', 0), 1) * 2)"
+  references:
+    - source: Instructions for Form 941
+      url: https://www.irs.gov/forms-pubs/about-form-941
+  fields:
+    - "amounts.line_5a_taxable_ss_wages"
+    - "amounts.line_1_num_employees"
+

@@ -1,0 +1,253 @@
+- id: K_PAYER_TIN_REQUIRED
+  form_types: ["1099-K"]
+  name: Payer TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Payer TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(payer_tin)"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields: ["payer.tin"]
+
+- id: K_PAYER_TIN_FORMAT
+  form_types: ["1099-K"]
+  name: Payer TIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Payer TIN must be a valid EIN format."
+  condition:
+    type: expression
+    expr: "not is_valid_ein(payer_tin)"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields: ["payer.tin"]
+
+- id: K_PAYEE_TIN_REQUIRED
+  form_types: ["1099-K"]
+  name: Payee TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Payee TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(recipient_tin)"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields: ["recipient.tin"]
+
+- id: K_PAYEE_TIN_FORMAT
+  form_types: ["1099-K"]
+  name: Payee TIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Payee TIN must be in valid EIN/SSN format."
+  condition:
+    type: expression
+    expr: "not (is_valid_ein(recipient_tin) or is_valid_ssn(recipient_tin))"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields: ["recipient.tin"]
+
+- id: K_AMOUNTS_NONNEGATIVE
+  form_types: ["1099-K"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Gross amounts, withholding, monthly totals, and transaction counts must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([get_amount(k, 0) for k in ['box_1a_gross_amount','box_1b_card_not_present','box_4_federal_income_tax_withheld']] + [min(get('amounts.monthly_totals', []) or [0]), get_amount('box_3_number_of_payment_transactions', 0)]) < 0"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields:
+    - "amounts.box_1a_gross_amount"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: K_ZERO_DOCUMENT_SANITY
+  form_types: ["1099-K"]
+  name: All key amounts zero
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Gross, monthly totals, and withholding are all zero; likely placeholder or extraction issue."
+  condition:
+    type: expression
+    expr: "get_amount('box_1a_gross_amount', 0) == 0 and get_amount('box_4_federal_income_tax_withheld', 0) == 0 and sum(get('amounts.monthly_totals', []) or [0]) == 0"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields:
+    - "amounts.box_1a_gross_amount"
+
+- id: K_MONTHLY_TOTAL_VS_GROSS_SANITY
+  form_types: ["1099-K"]
+  name: Monthly totals differ materially from gross
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Sum of monthly totals differs significantly from reported gross amount; review for completeness."
+  condition:
+    type: expression
+    expr: "get_amount('box_1a_gross_amount', 0) > 0 and abs(sum(get('amounts.monthly_totals', []) or [0]) - get_amount('box_1a_gross_amount', 0)) > 0.1 * max(get_amount('box_1a_gross_amount', 0), 1)"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields:
+    - "amounts.monthly_totals"
+    - "amounts.box_1a_gross_amount"
+
+- id: K_TRANSACTIONS_COUNT_NONNEGATIVE
+  form_types: ["1099-K"]
+  name: Transaction count cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Number of payment transactions must be zero or positive."
+  condition:
+    type: expression
+    expr: "get_amount('box_3_number_of_payment_transactions', 0) < 0"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields:
+    - "amounts.box_3_number_of_payment_transactions"
+
+- id: K_TRANSACTIONS_COUNT_VS_GROSS_SANITY
+  form_types: ["1099-K"]
+  name: Transaction count vs gross anomaly
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Gross amount and transaction count suggest implausible average transaction size or missing counts."
+  condition:
+    type: expression
+    expr: "get_amount('box_1a_gross_amount', 0) > 0 and (get_amount('box_3_number_of_payment_transactions', 0) == 0 or (get_amount('box_3_number_of_payment_transactions', 0) > 0 and (get_amount('box_1a_gross_amount', 0) / get_amount('box_3_number_of_payment_transactions', 0) > 20000 or get_amount('box_1a_gross_amount', 0) / get_amount('box_3_number_of_payment_transactions', 0) < 1)))"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields:
+    - "amounts.box_1a_gross_amount"
+    - "amounts.box_3_number_of_payment_transactions"
+
+- id: K_WITHHOLDING_REQUIRES_GROSS
+  form_types: ["1099-K"]
+  name: Withholding without gross receipts
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Federal withholding reported but gross amount is zero."
+  condition:
+    type: expression
+    expr: "get_amount('box_4_federal_income_tax_withheld', 0) > 0 and get_amount('box_1a_gross_amount', 0) <= 0"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields:
+    - "amounts.box_4_federal_income_tax_withheld"
+    - "amounts.box_1a_gross_amount"
+
+- id: K_WITHHOLDING_RATIO_SANITY
+  form_types: ["1099-K"]
+  name: Withholding ratio anomaly
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Federal withholding ratio is far outside a plausible band relative to gross receipts."
+  condition:
+    type: expression
+    expr: "get_amount('box_1a_gross_amount', 0) > 0 and get_amount('box_4_federal_income_tax_withheld', 0) > 0 and (get_amount('box_4_federal_income_tax_withheld', 0) / get_amount('box_1a_gross_amount', 0) < 0.01 or get_amount('box_4_federal_income_tax_withheld', 0) / get_amount('box_1a_gross_amount', 0) > 0.4)"
+  references:
+    - source: IRS Backup Withholding
+      url: https://www.irs.gov/businesses/small-businesses-self-employed/backup-withholding
+  fields:
+    - "amounts.box_1a_gross_amount"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: K_STATE_TAX_NONNEGATIVE
+  form_types: ["1099-K"]
+  name: State tax cannot be negative
+  severity: error
+  category: "STATE/LOCAL"
+  description: "State tax withholding must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([si.get('state_tax_withheld', 0) for si in get('state_items', [])] or [0]) < 0"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields:
+    - "state_items[].state_tax_withheld"
+
+- id: K_STATE_TAX_VS_GROSS_SANITY
+  form_types: ["1099-K"]
+  name: State withholding exceeds gross receipts
+  severity: warning
+  category: "STATE/LOCAL"
+  description: "Total state withholding exceeds reported gross receipts; review for misreporting."
+  condition:
+    type: expression
+    expr: "sum([si.get('state_tax_withheld', 0) for si in get('state_items', [])]) > get_amount('box_1a_gross_amount', 0)"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields:
+    - "state_items[].state_tax_withheld"
+    - "amounts.box_1a_gross_amount"
+
+- id: K_STATE_CODE_FORMAT
+  form_types: ["1099-K"]
+  name: State code format invalid
+  severity: warning
+  category: "STATE/LOCAL"
+  description: "State code on state items is missing or not a valid two-character code."
+  condition:
+    type: expression
+    expr: "any((not si.get('state_code') or len(str(si.get('state_code')).strip()) != 2 or re_match(r'[^A-Za-z]{2}', str(si.get('state_code')).strip())) for si in get('state_items', []))"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields:
+    - "state_items[].state_code"
+
+- id: K_REQUIRED_PAYER_INFO
+  form_types: ["1099-K"]
+  name: Payer info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Payer name or address information is missing."
+  condition:
+    type: expression
+    expr: "missing(get('payer.name', ''))"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields: ["payer.name"]
+
+- id: K_REQUIRED_PAYEE_INFO
+  form_types: ["1099-K"]
+  name: Payee info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Payee name or address information is missing."
+  condition:
+    type: expression
+    expr: "missing(get('recipient.name', '')) or missing(get('recipient.address', ''))"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields: ["recipient.name"]
+
+- id: K_MCC_PRESENCE
+  form_types: ["1099-K"]
+  name: Merchant category code missing
+  severity: warning
+  category: "MCC"
+  description: "Merchant category code (MCC) is not provided."
+  condition:
+    type: expression
+    expr: "missing(get('box_2_merchant_category_code', ''))"
+  references:
+    - source: IRS 1099-K Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-k
+  fields: ["box_2_merchant_category_code"]

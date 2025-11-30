@@ -1,0 +1,39 @@
+{
+  "doc_id": "f941-issues-2024q1",
+  "doc_type": "941",
+  "tax_year": 2024,
+  "tax_quarter": null,
+  "employer": {
+    "name": "Problem Employer Inc",
+    "ein": "",
+    "address": ""
+  },
+  "amounts": {
+    "line_1_num_employees": 5,
+    "line_2_wages_tips_other_comp": -1000.0,
+    "line_3_income_tax_withheld": 0.0,
+    "line_5a_taxable_ss_wages": 10000000.0,
+    "line_5a_ss_tax": 1000.0,
+    "line_5b_taxable_ss_tips": 50000.0,
+    "line_5b_ss_tax_tips": 500.0,
+    "line_5c_taxable_medicare_wages": 100000.0,
+    "line_5c_medicare_tax": 1000.0,
+    "line_5d_taxable_addl_medicare_wages": 50000.0,
+    "line_5d_addl_medicare_tax": 0.0,
+    "line_6_total_taxes_before_adjustments": 2000.0,
+    "line_7_current_quarter_fractions_of_cents_adjustment": 0.0,
+    "line_8_tip_adjustment": 0.0,
+    "line_9_sick_pay_adjustment": 0.0,
+    "line_10_total_taxes_after_adjustments": 1000.0,
+    "line_11_total_deposits_for_quarter": 500.0,
+    "line_12_refundable_credits": 0.0,
+    "line_13_total_taxes_after_credits": 1200.0,
+    "line_14_balance_due": 600.0,
+    "line_15_overpayment": 100.0
+  },
+  "ocr_quality": 0.7,
+  "meta": {
+    "source_pdf_path": "sample_data/f941_issues.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

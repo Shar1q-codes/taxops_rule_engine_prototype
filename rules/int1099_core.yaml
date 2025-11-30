@@ -1,0 +1,94 @@
+- id: INT1099_PAYER_TIN_REQUIRED
+  form_types: ["1099-INT"]
+  name: Payer TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Payer TIN must be present."
+  condition:
+    type: expression
+    expr: "missing(get('payer.tin', ''))"
+  references:
+    - source: IRS 1099-INT Instructions
+  fields: ["payer.tin"]
+
+- id: INT1099_RECIPIENT_TIN_REQUIRED
+  form_types: ["1099-INT"]
+  name: Recipient TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Recipient TIN must be present."
+  condition:
+    type: expression
+    expr: "missing(get('recipient.tin', ''))"
+  references:
+    - source: IRS 1099-INT Instructions
+  fields: ["recipient.tin"]
+
+- id: INT1099_TAX_YEAR_REASONABLE
+  form_types: ["1099-INT"]
+  name: Tax year out of range
+  severity: error
+  category: "STRUCTURE"
+  description: "Tax year must be between 2018 and a reasonable future year."
+  condition:
+    type: expression
+    expr: "tax_year is None or tax_year < 2018 or tax_year > (2030 if not supported_years else max(supported_years) + 1)"
+  references:
+    - source: IRS 1099-INT Instructions
+  fields: ["tax_year"]
+
+- id: INT1099_NONNEGATIVE_AMOUNTS
+  form_types: ["1099-INT"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "All reported interest amounts, penalties, discounts, premiums, and state withholding must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([get_amount(k, 0) for k in ['box_1_interest_income','box_2_early_withdrawal_penalty','box_3_us_savings_bonds_and_treasury_interest','box_4_federal_income_tax_withheld','box_5_investment_expenses','box_6_foreign_tax_paid','box_8_tax_exempt_interest','box_9_specified_private_activity_bond_interest','box_10_market_discount','box_11_bond_premium','box_12_bond_premium_tax_exempt','box_13_bond_premium_treasury']] + [min([si.get('state_tax_withheld', 0) for si in get('state_items', [])] or [0])]) < 0"
+  references:
+    - source: IRS 1099-INT Instructions
+  fields:
+    - "amounts.box_1_interest_income"
+
+- id: INT1099_WITHHELD_NOT_EXCESSIVE
+  form_types: ["1099-INT"]
+  name: Withholding disproportionately high
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Federal tax withholding should not exceed 50% of reported interest income."
+  condition:
+    type: expression
+    expr: "get_amount('box_1_interest_income', 0) > 0 and get_amount('box_4_federal_income_tax_withheld', 0) > get_amount('box_1_interest_income', 0) * 0.5"
+  references:
+    - source: IRS 1099-INT Instructions
+  fields:
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: INT1099_FOREIGN_TAX_WITH_COUNTRY
+  form_types: ["1099-INT"]
+  name: Foreign tax requires country
+  severity: warning
+  category: "FOREIGN"
+  description: "If foreign tax is reported, the foreign country or U.S. possession should be indicated."
+  condition:
+    type: expression
+    expr: "get_amount('box_6_foreign_tax_paid', 0) > 0 and missing(get('box_6_foreign_country_or_ust_possession', ''))"
+  references:
+    - source: IRS 1099-INT Instructions
+  fields:
+    - "amounts.box_6_foreign_tax_paid"
+
+- id: INT1099_TAX_EXEMPT_INTEREST_NONNEGATIVE
+  form_types: ["1099-INT"]
+  name: Tax-exempt interest must be non-negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Tax-exempt interest and specified private activity bond interest should be zero or positive."
+  condition:
+    type: expression
+    expr: "min(get_amount('box_8_tax_exempt_interest', 0), get_amount('box_9_specified_private_activity_bond_interest', 0)) < 0"
+  references:
+    - source: IRS 1099-INT Instructions
+  fields:
+    - "amounts.box_8_tax_exempt_interest"

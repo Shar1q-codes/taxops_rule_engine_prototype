@@ -1,0 +1,33 @@
+{
+  "doc_id": "c1099-issues-2035",
+  "doc_type": "1099-C",
+  "tax_year": 2035,
+  "creditor": {
+    "name": "Unknown Creditor",
+    "tin": "",
+    "address": ""
+  },
+  "debtor": {
+    "name": "Placeholder Debtor",
+    "tin": "",
+    "address": ""
+  },
+  "account_number": "",
+  "amounts": {
+    "box2_amount_of_debt_discharged": 5000.0,
+    "box3_interest_if_included": 6000.0,
+    "box7_fair_market_value_property": 40000.0
+  },
+  "box1_date_of_identifiable_event": "",
+  "box4_debt_description": "",
+  "box5_debtor_personally_liable": false,
+  "box6_identifiable_event_code": "",
+  "state_tax_withheld": [100.0, -50.0],
+  "state_id": ["CA"],
+  "state_income": [5000.0, 6000.0, 7000.0],
+  "ocr_quality": 0.6,
+  "meta": {
+    "source_pdf_path": "sample_data/c1099_issues.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

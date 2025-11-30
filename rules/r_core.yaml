@@ -1,0 +1,348 @@
+- id: R_PAYER_TIN_REQUIRED
+  form_types: ["1099-R"]
+  name: Payer TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Payer TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(payer_tin)"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields: ["payer.tin"]
+
+- id: R_PAYER_TIN_FORMAT
+  form_types: ["1099-R"]
+  name: Payer TIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Payer TIN must be a valid EIN format."
+  condition:
+    type: expression
+    expr: "not is_valid_ein(payer_tin)"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields: ["payer.tin"]
+
+- id: R_RECIPIENT_TIN_REQUIRED
+  form_types: ["1099-R"]
+  name: Recipient TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Recipient TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(recipient_tin)"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields: ["recipient.tin"]
+
+- id: R_RECIPIENT_TIN_FORMAT
+  form_types: ["1099-R"]
+  name: Recipient TIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Recipient TIN must be in valid SSN/EIN format."
+  condition:
+    type: expression
+    expr: "not (is_valid_ssn(recipient_tin) or is_valid_ein(recipient_tin))"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields: ["recipient.tin"]
+
+- id: R_AMOUNTS_NONNEGATIVE
+  form_types: ["1099-R"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Distribution amounts, capital gains, employee contributions, and withholding must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([get_amount(k, 0) for k in ['box_1_gross_distribution','box_2a_taxable_amount','box_3_capital_gain_included','box_4_federal_income_tax_withheld','box_5_employee_contributions_or_insurance_premiums','box_9b_total_employee_contributions','box_10_amount_allocable_to_IRR']] + [min([si.get('state_tax_withheld', 0) for si in get('state_items', [])] or [0])]) < 0"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields:
+    - "amounts.box_1_gross_distribution"
+    - "amounts.box_2a_taxable_amount"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: R_ZERO_DOCUMENT_SANITY
+  form_types: ["1099-R"]
+  name: All key amounts zero
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Gross distribution, taxable amount, capital gain, and withholding are all zero; likely placeholder or extraction issue."
+  condition:
+    type: expression
+    expr: "get_amount('box_1_gross_distribution', 0) == 0 and get_amount('box_2a_taxable_amount', 0) == 0 and get_amount('box_4_federal_income_tax_withheld', 0) == 0 and get_amount('box_3_capital_gain_included', 0) == 0 and sum([si.get('state_tax_withheld', 0) for si in get('state_items', [])]) == 0"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields:
+    - "amounts.box_1_gross_distribution"
+
+- id: R_TAXABLE_NOT_EXCEED_GROSS
+  form_types: ["1099-R"]
+  name: Taxable amount exceeds gross
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Taxable amount cannot exceed gross distribution beyond minor tolerance."
+  condition:
+    type: expression
+    expr: "get_amount('box_2a_taxable_amount', 0) - get_amount('box_1_gross_distribution', 0) > 1.0"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields:
+    - "amounts.box_1_gross_distribution"
+    - "amounts.box_2a_taxable_amount"
+
+- id: R_CAPITAL_GAIN_NOT_EXCEED_GROSS
+  form_types: ["1099-R"]
+  name: Capital gain exceeds gross distribution
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Capital gain cannot exceed gross distribution."
+  condition:
+    type: expression
+    expr: "get_amount('box_3_capital_gain_included', 0) > get_amount('box_1_gross_distribution', 0)"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields:
+    - "amounts.box_3_capital_gain_included"
+    - "amounts.box_1_gross_distribution"
+
+- id: R_EMPLOYEE_CONTRIB_NOT_EXCEED_GROSS
+  form_types: ["1099-R"]
+  name: Employee contributions exceed gross distribution
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Employee contributions/insurance premiums should not exceed gross distribution."
+  condition:
+    type: expression
+    expr: "get_amount('box_5_employee_contributions_or_insurance_premiums', 0) > get_amount('box_1_gross_distribution', 0)"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields:
+    - "amounts.box_5_employee_contributions_or_insurance_premiums"
+    - "amounts.box_1_gross_distribution"
+
+- id: R_WITHHOLDING_REQUIRES_GROSS
+  form_types: ["1099-R"]
+  name: Withholding without gross distribution
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Federal withholding reported but gross distribution is zero."
+  condition:
+    type: expression
+    expr: "get_amount('box_4_federal_income_tax_withheld', 0) > 0 and get_amount('box_1_gross_distribution', 0) <= 0"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields:
+    - "amounts.box_4_federal_income_tax_withheld"
+    - "amounts.box_1_gross_distribution"
+
+- id: R_WITHHOLDING_RATIO_SANITY
+  form_types: ["1099-R"]
+  name: Withholding ratio anomaly
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Federal withholding ratio is far outside a plausible band relative to taxable or gross amount."
+  condition:
+    type: expression
+    expr: "(get_amount('box_2a_taxable_amount', 0) > 0 or get_amount('box_1_gross_distribution', 0) > 0) and get_amount('box_4_federal_income_tax_withheld', 0) > 0 and (get_amount('box_4_federal_income_tax_withheld', 0) / (get_amount('box_2a_taxable_amount', 0) if get_amount('box_2a_taxable_amount', 0) > 0 else get_amount('box_1_gross_distribution', 0)) > 0.5 or get_amount('box_4_federal_income_tax_withheld', 0) / max(get_amount('box_2a_taxable_amount', 0), get_amount('box_1_gross_distribution', 0), 1) < 0)"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields:
+    - "amounts.box_4_federal_income_tax_withheld"
+    - "amounts.box_2a_taxable_amount"
+
+- id: R_STATE_TAX_NONNEGATIVE
+  form_types: ["1099-R"]
+  name: State tax cannot be negative
+  severity: error
+  category: "STATE/LOCAL"
+  description: "State tax withholding must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([si.get('state_tax_withheld', 0) for si in get('state_items', [])] or [0]) < 0"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields:
+    - "state_items[].state_tax_withheld"
+
+- id: R_STATE_TAX_VS_GROSS_SANITY
+  form_types: ["1099-R"]
+  name: State withholding exceeds gross distribution
+  severity: warning
+  category: "STATE/LOCAL"
+  description: "Total state withholding exceeds gross distribution; review for misreporting."
+  condition:
+    type: expression
+    expr: "sum([si.get('state_tax_withheld', 0) for si in get('state_items', [])]) > get_amount('box_1_gross_distribution', 0)"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields:
+    - "state_items[].state_tax_withheld"
+    - "amounts.box_1_gross_distribution"
+
+- id: R_STATE_CODE_FORMAT
+  form_types: ["1099-R"]
+  name: State code format invalid
+  severity: warning
+  category: "STATE/LOCAL"
+  description: "State code on state items is missing or not a valid two-character code."
+  condition:
+    type: expression
+    expr: "any((not si.get('state_code') or len(str(si.get('state_code')).strip()) != 2 or re_match(r'[^A-Za-z]{2}', str(si.get('state_code')).strip())) for si in get('state_items', []))"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields:
+    - "state_items[].state_code"
+
+- id: R_DISTRIBUTION_CODE_REQUIRED
+  form_types: ["1099-R"]
+  name: Distribution code missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Distribution code (Box 7) is required."
+  condition:
+    type: expression
+    expr: "not get('box_7_distribution_codes', [])"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields: ["box_7_distribution_codes"]
+
+- id: R_DISTRIBUTION_CODE_VALID
+  form_types: ["1099-R"]
+  name: Invalid distribution code
+  severity: error
+  category: "STRUCTURE"
+  description: "Distribution codes must be from the IRS 1099-R list."
+  condition:
+    type: expression
+    expr: "any(code not in ['1','2','3','4','7','8','A','B','C','D','E','F','G','H','J','K','L','M','N','P','Q','R','S','T','U'] for code in get('box_7_distribution_codes', []) if code)"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields: ["box_7_distribution_codes"]
+
+- id: R_CODE_G_ROLLOVER_TAXABLE_ZERO
+  form_types: ["1099-R"]
+  name: Code G rollover with taxable amount
+  severity: warning
+  category: "DISTRIBUTION_CODE"
+  description: "Direct rollover (code G) typically has zero taxable amount when taxable amount is determined."
+  condition:
+    type: expression
+    expr: "'G' in get('box_7_distribution_codes', []) and not get('box_2b_taxable_amount_not_determined', False) and get_amount('box_2a_taxable_amount', 0) > 0"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields:
+    - "box_7_distribution_codes"
+    - "amounts.box_2a_taxable_amount"
+
+- id: R_CODE_G_ROLLOVER_WITHHOLDING_SANITY
+  form_types: ["1099-R"]
+  name: Code G rollover with withholding
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Direct rollover (code G) usually should not have federal withholding."
+  condition:
+    type: expression
+    expr: "'G' in get('box_7_distribution_codes', []) and get_amount('box_4_federal_income_tax_withheld', 0) > 0"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields:
+    - "box_7_distribution_codes"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: R_CODE_Q_ROTH_TAXABLE_SANITY
+  form_types: ["1099-R"]
+  name: Roth qualified distribution appears fully taxable
+  severity: warning
+  category: "DISTRIBUTION_CODE"
+  description: "Code Q (qualified Roth distribution) typically should not have taxable amount equal to gross; review."
+  condition:
+    type: expression
+    expr: "'Q' in get('box_7_distribution_codes', []) and get_amount('box_2a_taxable_amount', 0) >= get_amount('box_1_gross_distribution', 0) and not get('box_2b_taxable_amount_not_determined', False)"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields:
+    - "box_7_distribution_codes"
+    - "amounts.box_1_gross_distribution"
+
+- id: R_CODE_J_ROTH_EARLY_TAXABLE_SANITY
+  form_types: ["1099-R"]
+  name: Early Roth distribution shows zero taxable amount
+  severity: info
+  category: "DISTRIBUTION_CODE"
+  description: "Code J (early Roth) showing zero taxable amount may warrant review if taxable amount is determined."
+  condition:
+    type: expression
+    expr: "'J' in get('box_7_distribution_codes', []) and get_amount('box_2a_taxable_amount', 0) == 0 and not get('box_2b_taxable_amount_not_determined', False)"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields:
+    - "box_7_distribution_codes"
+    - "amounts.box_2a_taxable_amount"
+
+- id: R_IRA_INDICATOR_CONSISTENCY
+  form_types: ["1099-R"]
+  name: IRA indicator inconsistent with distribution codes
+  severity: warning
+  category: "DISTRIBUTION_CODE"
+  description: "IRA/SEP/SIMPLE indicator is unchecked while IRA-type distribution codes (e.g., J, Q, T) are present."
+  condition:
+    type: expression
+    expr: "not get('box_7_ira_sep_simple_indicator', False) and any(code in ['J','Q','T'] for code in get('box_7_distribution_codes', []))"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields:
+    - "box_7_distribution_codes"
+
+- id: R_REQUIRED_PAYER_INFO
+  form_types: ["1099-R"]
+  name: Payer info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Payer name or address information is missing."
+  condition:
+    type: expression
+    expr: "missing(get('payer.name', ''))"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields: ["payer.name"]
+
+- id: R_REQUIRED_RECIPIENT_INFO
+  form_types: ["1099-R"]
+  name: Recipient info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Recipient name or address information is missing."
+  condition:
+    type: expression
+    expr: "missing(get('recipient.name', '')) or missing(get('recipient.address', ''))"
+  references:
+    - source: IRS 1099-R Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-r
+  fields: ["recipient.name"]

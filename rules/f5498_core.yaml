@@ -1,0 +1,122 @@
+- id: F5498_TRUSTEE_TIN_REQUIRED
+  form_types: ["5498"]
+  name: Trustee TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Trustee/custodian TIN must be present."
+  condition:
+    type: expression
+    expr: "missing(get('trustee.tin', ''))"
+  references:
+    - source: IRS Form 5498 Instructions
+  fields: ["trustee.tin"]
+
+- id: F5498_PARTICIPANT_TIN_REQUIRED
+  form_types: ["5498"]
+  name: Participant TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Participant TIN must be present."
+  condition:
+    type: expression
+    expr: "missing(get('participant.tin', ''))"
+  references:
+    - source: IRS Form 5498 Instructions
+  fields: ["participant.tin"]
+
+- id: F5498_TAX_YEAR_REASONABLE
+  form_types: ["5498"]
+  name: Tax year out of range
+  severity: error
+  category: "STRUCTURE"
+  description: "Tax year must be between 2018 and a reasonable future year."
+  condition:
+    type: expression
+    expr: "tax_year is None or tax_year < 2018 or tax_year > (2030 if not supported_years else max(supported_years) + 1)"
+  references:
+    - source: IRS Form 5498 Instructions
+  fields: ["tax_year"]
+
+- id: F5498_NONNEGATIVE_AMOUNTS
+  form_types: ["5498"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "All contribution and value amounts must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([get_amount(k, 0) for k in ['box1_ira_contributions','box2_rollover_contributions','box3_roth_ira_conversion_amount','box4_recharacterized_contributions','box5_fmv_of_account','box6_life_insurance_cost_in_ira','box7_roth_ira_contributions','box8_sep_contributions','box9_simple_contributions','box10_roth_ira_fmv_rollovers','box13_rmd_amount','box14_hsa_msa_contributions','box15_other_contributions']] ) < 0"
+  references:
+    - source: IRS Form 5498 Instructions
+  fields:
+    - "amounts.box1_ira_contributions"
+
+- id: F5498_ONE_ACCOUNT_TYPE_FLAG
+  form_types: ["5498"]
+  name: Account type flags inconsistent
+  severity: warning
+  category: "STRUCTURE"
+  description: "Exactly one account type (IRA/HSA/ESA flag) should be selected."
+  condition:
+    type: expression
+    expr: "(int(bool(get('flags.traditional_ira', False))) + int(bool(get('flags.roth_ira', False))) + int(bool(get('flags.sep_ira', False))) + int(bool(get('flags.simple_ira', False))) + int(bool(get('flags.hsa', False))) + int(bool(get('flags.esa_cesa', False)))) != 1"
+  references:
+    - source: IRS Form 5498 Instructions
+  fields:
+    - "flags.traditional_ira"
+
+- id: F5498_FMV_REQUIRED_WITH_ACCOUNT
+  form_types: ["5498"]
+  name: FMV missing with contributions
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "If contributions are reported, account fair market value should be provided."
+  condition:
+    type: expression
+    expr: "(get_amount('box1_ira_contributions',0) + get_amount('box2_rollover_contributions',0) + get_amount('box3_roth_ira_conversion_amount',0) + get_amount('box4_recharacterized_contributions',0) + get_amount('box7_roth_ira_contributions',0) + get_amount('box8_sep_contributions',0) + get_amount('box9_simple_contributions',0) + get_amount('box14_hsa_msa_contributions',0) + get_amount('box15_other_contributions',0)) > 0 and get_amount('box5_fmv_of_account', 0) == 0"
+  references:
+    - source: IRS Form 5498 Instructions
+  fields:
+    - "amounts.box5_fmv_of_account"
+
+- id: F5498_RMD_DATE_REQUIRED_WHEN_INDICATOR_TRUE
+  form_types: ["5498"]
+  name: RMD date missing
+  severity: warning
+  category: "STRUCTURE"
+  description: "If RMD indicator is checked, RMD date should be present."
+  condition:
+    type: expression
+    expr: "get('box11_required_minimum_distribution_indicator', False) and missing(get('box12_rmd_date', ''))"
+  references:
+    - source: IRS Form 5498 Instructions
+  fields:
+    - "box12_rmd_date"
+
+- id: F5498_RMD_AMOUNT_NONNEGATIVE_WHEN_INDICATOR_TRUE
+  form_types: ["5498"]
+  name: RMD amount must be non-negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "If RMD indicator is checked and an amount is provided, it must be zero or positive."
+  condition:
+    type: expression
+    expr: "get('box11_required_minimum_distribution_indicator', False) and get_amount('box13_rmd_amount', 0) < 0"
+  references:
+    - source: IRS Form 5498 Instructions
+  fields:
+    - "amounts.box13_rmd_amount"
+
+- id: F5498_CONTRIBUTIONS_NOT_ABSURD_VS_FMV
+  form_types: ["5498"]
+  name: Contributions unusually large vs FMV
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Total contributions should not vastly exceed account FMV."
+  condition:
+    type: expression
+    expr: "get_amount('box5_fmv_of_account', 0) > 0 and (get_amount('box1_ira_contributions',0) + get_amount('box2_rollover_contributions',0) + get_amount('box3_roth_ira_conversion_amount',0) + get_amount('box4_recharacterized_contributions',0) + get_amount('box7_roth_ira_contributions',0) + get_amount('box8_sep_contributions',0) + get_amount('box9_simple_contributions',0) + get_amount('box14_hsa_msa_contributions',0) + get_amount('box15_other_contributions',0)) > get_amount('box5_fmv_of_account', 0) * 2"
+  references:
+    - source: IRS Form 5498 Instructions
+  fields:
+    - "amounts.box1_ira_contributions"

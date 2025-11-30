@@ -1,0 +1,94 @@
+- id: S1099_FILERS_TIN_REQUIRED
+  form_types: ["1099-S"]
+  name: Filer TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Filer TIN must be present."
+  condition:
+    type: expression
+    expr: "missing(get('filer.tin', ''))"
+  references:
+    - source: IRS 1099-S Instructions
+  fields: ["filer.tin"]
+
+- id: S1099_TRANSFEROR_TIN_REQUIRED
+  form_types: ["1099-S"]
+  name: Transferor TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Transferor TIN must be present."
+  condition:
+    type: expression
+    expr: "missing(get('transferor.tin', ''))"
+  references:
+    - source: IRS 1099-S Instructions
+  fields: ["transferor.tin"]
+
+- id: S1099_TAX_YEAR_REASONABLE
+  form_types: ["1099-S"]
+  name: Tax year out of range
+  severity: error
+  category: "STRUCTURE"
+  description: "Tax year must be between 2018 and a reasonable future year."
+  condition:
+    type: expression
+    expr: "tax_year is None or tax_year < 2018 or tax_year > (2030 if not supported_years else max(supported_years) + 1)"
+  references:
+    - source: IRS 1099-S Instructions
+  fields: ["tax_year"]
+
+- id: S1099_NONNEGATIVE_AMOUNTS
+  form_types: ["1099-S"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Gross proceeds, withholding, and state-level amounts must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([get_amount(k, 0) for k in ['box1_gross_proceeds','box4_federal_income_tax_withheld']] + [min([v for v in get('state_tax_withheld', []) if v is not None] or [0]), min([v for v in get('state_income', []) if v is not None] or [0])]) < 0"
+  references:
+    - source: IRS 1099-S Instructions
+  fields:
+    - "amounts.box1_gross_proceeds"
+
+- id: S1099_WITHHELD_NOT_EXCESSIVE
+  form_types: ["1099-S"]
+  name: Withholding disproportionately high
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Federal withholding should not exceed 50% of gross proceeds."
+  condition:
+    type: expression
+    expr: "get_amount('box1_gross_proceeds', 0) > 0 and get_amount('box4_federal_income_tax_withheld', 0) > get_amount('box1_gross_proceeds', 0) * 0.5"
+  references:
+    - source: IRS 1099-S Instructions
+  fields:
+    - "amounts.box4_federal_income_tax_withheld"
+
+- id: S1099_STATE_LIST_LENGTHS_MATCH
+  form_types: ["1099-S"]
+  name: State fields length mismatch
+  severity: warning
+  category: "STATE/LOCAL"
+  description: "State withheld, state IDs, and state income lists should align in length."
+  condition:
+    type: expression
+    expr: "(len(get('state_tax_withheld', [])) not in (0, len(get('state_id', [])), len(get('state_income', [])))) or (len(get('state_id', [])) not in (0, len(get('state_tax_withheld', [])), len(get('state_income', [])))) or (len(get('state_income', [])) not in (0, len(get('state_tax_withheld', [])), len(get('state_id', []))))"
+  references:
+    - source: IRS 1099-S Instructions
+  fields:
+    - "state_tax_withheld"
+
+- id: S1099_CLOSING_DATE_PRESENT_WITH_GROSS
+  form_types: ["1099-S"]
+  name: Closing date missing
+  severity: warning
+  category: "STRUCTURE"
+  description: "If gross proceeds are reported, closing date should be present."
+  condition:
+    type: expression
+    expr: "get_amount('box1_gross_proceeds', 0) > 0 and missing(get('closing_date', ''))"
+  references:
+    - source: IRS 1099-S Instructions
+  fields:
+    - "closing_date"

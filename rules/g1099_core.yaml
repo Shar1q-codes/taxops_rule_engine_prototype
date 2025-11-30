@@ -1,0 +1,94 @@
+- id: G1099_PAYER_TIN_REQUIRED
+  form_types: ["1099-G"]
+  name: Payer TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Payer TIN must be present."
+  condition:
+    type: expression
+    expr: "missing(get('payer.tin', ''))"
+  references:
+    - source: IRS 1099-G Instructions
+  fields: ["payer.tin"]
+
+- id: G1099_RECIPIENT_TIN_REQUIRED
+  form_types: ["1099-G"]
+  name: Recipient TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Recipient TIN must be present."
+  condition:
+    type: expression
+    expr: "missing(get('recipient.tin', ''))"
+  references:
+    - source: IRS 1099-G Instructions
+  fields: ["recipient.tin"]
+
+- id: G1099_TAX_YEAR_REASONABLE
+  form_types: ["1099-G"]
+  name: Tax year out of range
+  severity: error
+  category: "STRUCTURE"
+  description: "Tax year must be between 2018 and a reasonable future year."
+  condition:
+    type: expression
+    expr: "tax_year is None or tax_year < 2018 or tax_year > (2030 if not supported_years else max(supported_years) + 1)"
+  references:
+    - source: IRS 1099-G Instructions
+  fields: ["tax_year"]
+
+- id: G1099_NONNEGATIVE_AMOUNTS
+  form_types: ["1099-G"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "All reported amounts must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([get_amount(k, 0) for k in ['box1_unemployment_compensation','box2_state_local_tax_refunds','box4_federal_income_tax_withheld','box5_rtaa_payments','box6_taxable_grants','box7_agricultural_payments','box9_market_gain']] + [min([v for v in get('box10_state_tax_withheld', []) if v is not None] or [0]), min([v for v in get('box12_state_income', []) if v is not None] or [0])]) < 0"
+  references:
+    - source: IRS 1099-G Instructions
+  fields:
+    - "amounts.box1_unemployment_compensation"
+
+- id: G1099_WITHHELD_NOT_EXCESSIVE
+  form_types: ["1099-G"]
+  name: Withholding disproportionately high
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Federal withholding should not exceed 50% of total reportable payments."
+  condition:
+    type: expression
+    expr: "(get_amount('box4_federal_income_tax_withheld', 0) > 0) and ((get_amount('box1_unemployment_compensation',0) + get_amount('box2_state_local_tax_refunds',0) + get_amount('box5_rtaa_payments',0) + get_amount('box6_taxable_grants',0) + get_amount('box7_agricultural_payments',0) + get_amount('box9_market_gain',0)) > 0) and (get_amount('box4_federal_income_tax_withheld',0) > 0.5 * (get_amount('box1_unemployment_compensation',0) + get_amount('box2_state_local_tax_refunds',0) + get_amount('box5_rtaa_payments',0) + get_amount('box6_taxable_grants',0) + get_amount('box7_agricultural_payments',0) + get_amount('box9_market_gain',0)))"
+  references:
+    - source: IRS 1099-G Instructions
+  fields:
+    - "amounts.box4_federal_income_tax_withheld"
+
+- id: G1099_STATE_LIST_LENGTHS_MATCH
+  form_types: ["1099-G"]
+  name: State fields length mismatch
+  severity: warning
+  category: "STATE/LOCAL"
+  description: "State tax withheld, state IDs, and state income lists should align in length."
+  condition:
+    type: expression
+    expr: "(len(get('box10_state_tax_withheld', [])) not in (0, len(get('box11_state_id', [])), len(get('box12_state_income', [])))) or (len(get('box11_state_id', [])) not in (0, len(get('box10_state_tax_withheld', [])), len(get('box12_state_income', [])))) or (len(get('box12_state_income', [])) not in (0, len(get('box10_state_tax_withheld', [])), len(get('box11_state_id', []))))"
+  references:
+    - source: IRS 1099-G Instructions
+  fields:
+    - "box10_state_tax_withheld"
+
+- id: G1099_BOX2_TAX_YEAR_PRESENT
+  form_types: ["1099-G"]
+  name: Box 2 tax year missing
+  severity: warning
+  category: "STRUCTURE"
+  description: "If state/local tax refunds (box 2) are reported, the related tax year (box 3) should be provided."
+  condition:
+    type: expression
+    expr: "get_amount('box2_state_local_tax_refunds', 0) > 0 and (get('box3_box2_tax_year') is None or get('box3_box2_tax_year') < 2010 or (tax_year is not None and get('box3_box2_tax_year') > tax_year))"
+  references:
+    - source: IRS 1099-G Instructions
+  fields:
+    - "box3_box2_tax_year"

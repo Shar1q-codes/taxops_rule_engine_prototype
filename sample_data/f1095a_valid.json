@@ -1,0 +1,42 @@
+{
+  "doc_id": "f1095a-valid-2024",
+  "doc_type": "1095-A",
+  "tax_year": 2024,
+  "issuer": {
+    "name": "Marketplace A",
+    "ein": "12-3456789",
+    "address": "100 Marketplace St, City, ST 00000"
+  },
+  "recipient": {
+    "name": "Pat Policyholder",
+    "tin": "123-45-6789",
+    "address": "200 Recipient Rd, Town, ST 11111"
+  },
+  "covered_individuals": [
+    {
+      "name": "Pat Policyholder",
+      "ssn_or_tin": "123-45-6789",
+      "coverage_start": "2024-01-01",
+      "coverage_end": "2024-12-31"
+    }
+  ],
+  "months": [
+    {"month_index": 1, "monthly_premium": 500.0, "slcsp_premium": 480.0, "advance_premium_tax_credit": 200.0},
+    {"month_index": 2, "monthly_premium": 500.0, "slcsp_premium": 480.0, "advance_premium_tax_credit": 200.0},
+    {"month_index": 3, "monthly_premium": 500.0, "slcsp_premium": 480.0, "advance_premium_tax_credit": 200.0},
+    {"month_index": 4, "monthly_premium": 500.0, "slcsp_premium": 480.0, "advance_premium_tax_credit": 200.0},
+    {"month_index": 5, "monthly_premium": 500.0, "slcsp_premium": 480.0, "advance_premium_tax_credit": 200.0},
+    {"month_index": 6, "monthly_premium": 500.0, "slcsp_premium": 480.0, "advance_premium_tax_credit": 200.0},
+    {"month_index": 7, "monthly_premium": 500.0, "slcsp_premium": 480.0, "advance_premium_tax_credit": 200.0},
+    {"month_index": 8, "monthly_premium": 500.0, "slcsp_premium": 480.0, "advance_premium_tax_credit": 200.0},
+    {"month_index": 9, "monthly_premium": 500.0, "slcsp_premium": 480.0, "advance_premium_tax_credit": 200.0},
+    {"month_index": 10, "monthly_premium": 500.0, "slcsp_premium": 480.0, "advance_premium_tax_credit": 200.0},
+    {"month_index": 11, "monthly_premium": 500.0, "slcsp_premium": 480.0, "advance_premium_tax_credit": 200.0},
+    {"month_index": 12, "monthly_premium": 500.0, "slcsp_premium": 480.0, "advance_premium_tax_credit": 200.0}
+  ],
+  "ocr_quality": 1.0,
+  "meta": {
+    "source_pdf_path": "sample_data/f1095a_valid.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

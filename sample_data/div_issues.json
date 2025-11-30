@@ -1,0 +1,38 @@
+{
+  "doc_id": "div-issues-2024",
+  "doc_type": "1099-DIV",
+  "tax_year": 2024,
+  "payer": {
+    "name": "",
+    "tin": "",
+    "address": ""
+  },
+  "recipient": {
+    "name": "Recipient Missing TIN",
+    "tin": "123",
+    "address": ""
+  },
+  "amounts": {
+    "box_1a_total_ordinary_dividends": 0.0,
+    "box_1b_qualified_dividends": 100.0,
+    "box_2a_total_capital_gain_distributions": 2000.0,
+    "box_4_federal_income_tax_withheld": 2000.0,
+    "box_6_foreign_tax_paid": 300.0,
+    "box_11_section_199a_dividends": 500.0,
+    "box_12_exempt_interest_dividends": -20.0,
+    "box_13_specified_private_activity_bond_interest_dividends": 100.0,
+    "federal_withholding": 2000.0
+  },
+  "box_7_foreign_country_or_possession": "",
+  "state_items": [
+    {
+      "state_code": "ZZZ",
+      "state_tax_withheld": -5.0
+    }
+  ],
+  "ocr_quality": 0.7,
+  "meta": {
+    "source_pdf_path": "sample_data/div_issues.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

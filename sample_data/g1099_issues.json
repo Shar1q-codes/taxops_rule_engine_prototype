@@ -1,0 +1,35 @@
+{
+  "doc_id": "g1099-issues-2035",
+  "doc_type": "1099-G",
+  "tax_year": 2035,
+  "payer": {
+    "name": "Unknown Agency",
+    "tin": "",
+    "address": ""
+  },
+  "recipient": {
+    "name": "Placeholder Recipient",
+    "tin": "",
+    "address": ""
+  },
+  "account_number": "",
+  "amounts": {
+    "box1_unemployment_compensation": -100.0,
+    "box2_state_local_tax_refunds": 500.0,
+    "box4_federal_income_tax_withheld": 5000.0,
+    "box5_rtaa_payments": -20.0,
+    "box6_taxable_grants": -10.0,
+    "box7_agricultural_payments": -5.0,
+    "box9_market_gain": -1.0
+  },
+  "box3_box2_tax_year": 2000,
+  "box8_trade_or_business_indicator": false,
+  "box10_state_tax_withheld": [100.0, 200.0],
+  "box11_state_id": ["CA"],
+  "box12_state_income": [1000.0, 2000.0, 3000.0],
+  "ocr_quality": 0.6,
+  "meta": {
+    "source_pdf_path": "sample_data/g1099_issues.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

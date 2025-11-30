@@ -1,0 +1,122 @@
+- id: Q1099_PAYER_TIN_REQUIRED
+  form_types: ["1099-Q"]
+  name: Payer TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Payer/trustee TIN must be present."
+  condition:
+    type: expression
+    expr: "missing(get('payer.tin', ''))"
+  references:
+    - source: IRS 1099-Q Instructions
+  fields: ["payer.tin"]
+
+- id: Q1099_RECIPIENT_TIN_REQUIRED
+  form_types: ["1099-Q"]
+  name: Recipient TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Recipient TIN must be present."
+  condition:
+    type: expression
+    expr: "missing(get('recipient.tin', ''))"
+  references:
+    - source: IRS 1099-Q Instructions
+  fields: ["recipient.tin"]
+
+- id: Q1099_TAX_YEAR_REASONABLE
+  form_types: ["1099-Q"]
+  name: Tax year out of range
+  severity: error
+  category: "STRUCTURE"
+  description: "Tax year must be between 2018 and a reasonable future year."
+  condition:
+    type: expression
+    expr: "tax_year is None or tax_year < 2018 or tax_year > (2030 if not supported_years else max(supported_years) + 1)"
+  references:
+    - source: IRS 1099-Q Instructions
+  fields: ["tax_year"]
+
+- id: Q1099_NONNEGATIVE_AMOUNTS
+  form_types: ["1099-Q"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Gross distribution, earnings, basis, and state amounts must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([get_amount(k, 0) for k in ['box1_gross_distribution','box2_earnings','box3_basis']] + [min([v for v in get('state_tax_withheld', []) if v is not None] or [0]), min([v for v in get('state_income', []) if v is not None] or [0])]) < 0"
+  references:
+    - source: IRS 1099-Q Instructions
+  fields:
+    - "amounts.box1_gross_distribution"
+
+- id: Q1099_EARNINGS_PLUS_BASIS_NOT_GT_GROSS
+  form_types: ["1099-Q"]
+  name: Earnings plus basis exceed gross
+  severity: warning
+  category: "MATH/CONSISTENCY"
+  description: "Earnings plus basis should not exceed gross distribution beyond a small tolerance."
+  condition:
+    type: expression
+    expr: "get_amount('box1_gross_distribution', 0) > 0 and (get_amount('box2_earnings', 0) + get_amount('box3_basis', 0)) > get_amount('box1_gross_distribution', 0) * 1.05"
+  references:
+    - source: IRS 1099-Q Instructions
+  fields:
+    - "amounts.box2_earnings"
+
+- id: Q1099_GROSS_REQUIRED_WHEN_EARNINGS_OR_BASIS_PRESENT
+  form_types: ["1099-Q"]
+  name: Gross distribution missing
+  severity: error
+  category: "STRUCTURE"
+  description: "If earnings or basis are reported, gross distribution should be present and positive."
+  condition:
+    type: expression
+    expr: "(get_amount('box2_earnings', 0) > 0 or get_amount('box3_basis', 0) > 0) and get_amount('box1_gross_distribution', 0) <= 0"
+  references:
+    - source: IRS 1099-Q Instructions
+  fields:
+    - "amounts.box1_gross_distribution"
+
+- id: Q1099_ONE_PROGRAM_TYPE_FLAG
+  form_types: ["1099-Q"]
+  name: Program type flags inconsistent
+  severity: warning
+  category: "STRUCTURE"
+  description: "Exactly one of Qualified Tuition Program (529) or Coverdell ESA should be selected."
+  condition:
+    type: expression
+    expr: "(int(bool(get('qualified_tuition_program_529', False))) + int(bool(get('coverdell_esa', False)))) != 1"
+  references:
+    - source: IRS 1099-Q Instructions
+  fields:
+    - "qualified_tuition_program_529"
+
+- id: Q1099_STATE_LIST_LENGTHS_MATCH
+  form_types: ["1099-Q"]
+  name: State fields length mismatch
+  severity: warning
+  category: "STATE/LOCAL"
+  description: "State withheld, state IDs, and state income lists should align in length."
+  condition:
+    type: expression
+    expr: "(len(get('state_tax_withheld', [])) not in (0, len(get('state_id', [])), len(get('state_income', [])))) or (len(get('state_id', [])) not in (0, len(get('state_tax_withheld', [])), len(get('state_income', [])))) or (len(get('state_income', [])) not in (0, len(get('state_tax_withheld', [])), len(get('state_id', []))))"
+  references:
+    - source: IRS 1099-Q Instructions
+  fields:
+    - "state_tax_withheld"
+
+- id: Q1099_TRUSTEE_TRANSFER_HAS_ZERO_EARNINGS
+  form_types: ["1099-Q"]
+  name: Trustee transfer with high earnings
+  severity: warning
+  category: "MATH/CONSISTENCY"
+  description: "Trustee-to-trustee transfers typically should not have significant earnings reported."
+  condition:
+    type: expression
+    expr: "get('box4_trustee_to_trustee_transfer', False) and get_amount('box1_gross_distribution', 0) > 0 and get_amount('box2_earnings', 0) > get_amount('box1_gross_distribution', 0) * 0.1"
+  references:
+    - source: IRS 1099-Q Instructions
+  fields:
+    - "box4_trustee_to_trustee_transfer"

@@ -1,0 +1,37 @@
+{
+  "doc_id": "ssa1099-valid-2024",
+  "doc_type": "SSA-1099",
+  "tax_year": 2024,
+  "payer": {
+    "name": "Social Security Administration",
+    "tin": "",
+    "address": "SSA, PO Box 000, City, ST 00000"
+  },
+  "beneficiary": {
+    "name": "John Beneficiary",
+    "tin": "123-45-6789",
+    "address": "100 Main St, City, ST 00000"
+  },
+  "amounts": {
+    "box_3_benefits_paid": 20000.0,
+    "box_4_benefits_repaid": 1000.0,
+    "box_5_net_benefits": 19000.0,
+    "box_6_voluntary_federal_tax_withheld": 2000.0,
+    "box_7_medicare_premiums": 0.0,
+    "box_8_other_deductions_or_adjustments": 0.0,
+    "box_9_state_repayment": 0.0,
+    "federal_withholding": 2000.0
+  },
+  "state_items": [
+    {
+      "state_code": "CA",
+      "state_tax_withheld": 500.0,
+      "state_id_number": "CA-0001"
+    }
+  ],
+  "ocr_quality": 1.0,
+  "meta": {
+    "source_pdf_path": "sample_data/ssa1099_valid.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "doc_id": "w9-issues-2024",
+  "doc_type": "W-9",
+  "tax_year": 2024,
+  "requestor_name": "",
+  "taxpayer_name": "",
+  "business_name_disregarded": "BizName",
+  "federal_tax_classification": "LLC",
+  "llc_tax_class_code": "",
+  "exempt_payee_code": "A",
+  "fatca_exemption_code": "1",
+  "address_line1": "",
+  "address_line2": "",
+  "city": "",
+  "state": "ZZZ",
+  "zip_code": "12-345",
+  "ssn": "000-00-0000",
+  "ein": "11-1111111",
+  "tin_raw": "000-00-0000",
+  "certification_signed_flag": false,
+  "certification_date": "",
+  "ocr_quality": 0.7,
+  "meta": {
+    "source_pdf_path": "sample_data/w9_issues.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "doc_id": "q1099-valid-2024",
+  "doc_type": "1099-Q",
+  "tax_year": 2024,
+  "payer": {
+    "name": "529 Custodian Inc",
+    "tin": "98-7654321",
+    "address": "100 Education Way, City, ST 00000"
+  },
+  "recipient": {
+    "name": "Casey Beneficiary",
+    "tin": "123-45-6789",
+    "address": "200 College Rd, Town, ST 11111"
+  },
+  "account_number": "ACCT-Q-001",
+  "amounts": {
+    "box1_gross_distribution": 10000.0,
+    "box2_earnings": 2000.0,
+    "box3_basis": 8000.0
+  },
+  "box4_trustee_to_trustee_transfer": false,
+  "box5_qualified_tuition_program": true,
+  "box6_life_insurance_distributed": false,
+  "qualified_tuition_program_529": true,
+  "coverdell_esa": false,
+  "state_tax_withheld": [300.0],
+  "state_id": ["CA"],
+  "state_income": [10000.0],
+  "ocr_quality": 1.0,
+  "meta": {
+    "source_pdf_path": "sample_data/q1099_valid.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

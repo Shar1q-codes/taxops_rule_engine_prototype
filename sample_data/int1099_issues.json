@@ -1,0 +1,48 @@
+{
+  "doc_id": "int1099-issues-2035",
+  "doc_type": "1099-INT",
+  "tax_year": 2035,
+  "payer": {
+    "name": "Unknown Bank",
+    "tin": "",
+    "address": ""
+  },
+  "recipient": {
+    "name": "Placeholder Recipient",
+    "tin": "",
+    "address": ""
+  },
+  "account_number": "",
+  "amounts": {
+    "box_1_interest_income": 10.0,
+    "box_2_early_withdrawal_penalty": -5.0,
+    "box_3_us_savings_bonds_and_treasury_interest": -1.0,
+    "box_4_federal_income_tax_withheld": 1000.0,
+    "box_5_investment_expenses": -2.0,
+    "box_6_foreign_tax_paid": 50.0,
+    "box_8_tax_exempt_interest": -3.0,
+    "box_9_specified_private_activity_bond_interest": -4.0,
+    "box_10_market_discount": -6.0,
+    "box_11_bond_premium": -7.0,
+    "box_12_bond_premium_tax_exempt": -8.0,
+    "box_13_bond_premium_treasury": -9.0,
+    "federal_withholding": 1000.0
+  },
+  "box_6_foreign_country_or_ust_possession": "",
+  "box_14_tax_exempt_cusip": "",
+  "box_15_state": ["ZZ"],
+  "box_16_state_tax_withheld": [-20.0],
+  "box_17_state_id": [""],
+  "state_items": [
+    {
+      "state_code": "ZZ",
+      "state_id_number": "",
+      "state_tax_withheld": -20.0
+    }
+  ],
+  "ocr_quality": 0.6,
+  "meta": {
+    "source_pdf_path": "sample_data/int1099_issues.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

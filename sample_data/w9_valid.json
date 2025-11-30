@@ -1,0 +1,27 @@
+{
+  "doc_id": "w9-valid-2024",
+  "doc_type": "W-9",
+  "tax_year": 2024,
+  "requestor_name": "Requester Corp",
+  "taxpayer_name": "Jane Doe",
+  "business_name_disregarded": "",
+  "federal_tax_classification": "individual/sole proprietor",
+  "llc_tax_class_code": "",
+  "exempt_payee_code": "",
+  "fatca_exemption_code": "",
+  "address_line1": "123 Main St",
+  "address_line2": "Apt 4",
+  "city": "Springfield",
+  "state": "IL",
+  "zip_code": "62704",
+  "ssn": "123-45-6789",
+  "ein": "",
+  "tin_raw": "123-45-6789",
+  "certification_signed_flag": true,
+  "certification_date": "2024-02-01",
+  "ocr_quality": 1.0,
+  "meta": {
+    "source_pdf_path": "sample_data/w9_valid.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

@@ -51,6 +51,15 @@ class Int1099Document:
     box_9_specified_private_activity_bond_interest: float = 0.0
     box_10_market_discount: float = 0.0
     box_11_bond_premium: float = 0.0
+    box_12_bond_premium_tax_exempt: float = 0.0
+    box_13_bond_premium_treasury: float = 0.0
+
+    box_6_foreign_country: str = ""
+    box_14_tax_exempt_cusip: str = ""
+
+    box_15_state: List[str] = field(default_factory=list)
+    box_16_state_tax_withheld: List[float] = field(default_factory=list)
+    box_17_state_id: List[str] = field(default_factory=list)
 
     state_items: List[StateItem] = field(default_factory=list)
 
@@ -75,6 +84,8 @@ class Int1099Document:
             ),
             "box_10_market_discount": _as_float(self.box_10_market_discount, 0.0),
             "box_11_bond_premium": _as_float(self.box_11_bond_premium, 0.0),
+            "box_12_bond_premium_tax_exempt": _as_float(self.box_12_bond_premium_tax_exempt, 0.0),
+            "box_13_bond_premium_treasury": _as_float(self.box_13_bond_premium_treasury, 0.0),
             # Aliases to align with generic fields where possible
             "federal_withholding": _as_float(self.box_4_federal_income_tax_withheld, 0.0),
             "state_withholding": 0.0,
@@ -95,6 +106,11 @@ class Int1099Document:
                 "address": self.recipient_address,
             },
             "account_number": self.account_number,
+            "box_6_foreign_country_or_ust_possession": self.box_6_foreign_country,
+            "box_14_tax_exempt_cusip": self.box_14_tax_exempt_cusip,
+            "box_15_state": list(self.box_15_state),
+            "box_16_state_tax_withheld": [_as_float(v, 0.0) for v in self.box_16_state_tax_withheld],
+            "box_17_state_id": list(self.box_17_state_id),
             "amounts": amounts,
             "state_items": [item.normalize() for item in self.state_items],
             "ocr_quality": self.ocr_quality,

@@ -1,0 +1,122 @@
+- id: C1099_CREDITOR_TIN_REQUIRED
+  form_types: ["1099-C"]
+  name: Creditor TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Creditor TIN must be present."
+  condition:
+    type: expression
+    expr: "missing(get('creditor.tin', ''))"
+  references:
+    - source: IRS 1099-C Instructions
+  fields: ["creditor.tin"]
+
+- id: C1099_DEBTOR_TIN_REQUIRED
+  form_types: ["1099-C"]
+  name: Debtor TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Debtor TIN must be present."
+  condition:
+    type: expression
+    expr: "missing(get('debtor.tin', ''))"
+  references:
+    - source: IRS 1099-C Instructions
+  fields: ["debtor.tin"]
+
+- id: C1099_TAX_YEAR_REASONABLE
+  form_types: ["1099-C"]
+  name: Tax year out of range
+  severity: error
+  category: "STRUCTURE"
+  description: "Tax year must be between 2018 and a reasonable future year."
+  condition:
+    type: expression
+    expr: "tax_year is None or tax_year < 2018 or tax_year > (2030 if not supported_years else max(supported_years) + 1)"
+  references:
+    - source: IRS 1099-C Instructions
+  fields: ["tax_year"]
+
+- id: C1099_NONNEGATIVE_AMOUNTS
+  form_types: ["1099-C"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Debt discharged, interest, FMV, and state amounts must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([get_amount(k, 0) for k in ['box2_amount_of_debt_discharged','box3_interest_if_included','box7_fair_market_value_property']] + [min([v for v in get('state_tax_withheld', []) if v is not None] or [0]), min([v for v in get('state_income', []) if v is not None] or [0])]) < 0"
+  references:
+    - source: IRS 1099-C Instructions
+  fields:
+    - "amounts.box2_amount_of_debt_discharged"
+
+- id: C1099_EVENT_DATE_REQUIRED_WITH_DISCHARGE
+  form_types: ["1099-C"]
+  name: Event date missing with discharge
+  severity: warning
+  category: "STRUCTURE"
+  description: "If debt discharge is reported, the date of the identifiable event should be present."
+  condition:
+    type: expression
+    expr: "get_amount('box2_amount_of_debt_discharged', 0) > 0 and missing(get('box1_date_of_identifiable_event', ''))"
+  references:
+    - source: IRS 1099-C Instructions
+  fields:
+    - "box1_date_of_identifiable_event"
+
+- id: C1099_EVENT_CODE_REQUIRED_WITH_DISCHARGE
+  form_types: ["1099-C"]
+  name: Event code missing with discharge
+  severity: warning
+  category: "STRUCTURE"
+  description: "If debt discharge is reported, the identifiable event code should be present."
+  condition:
+    type: expression
+    expr: "get_amount('box2_amount_of_debt_discharged', 0) > 0 and missing(get('box6_identifiable_event_code', ''))"
+  references:
+    - source: IRS 1099-C Instructions
+  fields:
+    - "box6_identifiable_event_code"
+
+- id: C1099_INTEREST_NOT_GT_DISCHARGED
+  form_types: ["1099-C"]
+  name: Interest exceeds discharged amount
+  severity: error
+  category: "MATH/CONSISTENCY"
+  description: "Interest included should not exceed the discharged amount."
+  condition:
+    type: expression
+    expr: "get_amount('box2_amount_of_debt_discharged', 0) > 0 and get_amount('box3_interest_if_included', 0) > get_amount('box2_amount_of_debt_discharged', 0)"
+  references:
+    - source: IRS 1099-C Instructions
+  fields:
+    - "amounts.box3_interest_if_included"
+
+- id: C1099_FMV_NOT_GT_DISCHARGED_X_FACTOR
+  form_types: ["1099-C"]
+  name: FMV unusually high vs discharge
+  severity: warning
+  category: "MATH/CONSISTENCY"
+  description: "Fair market value of property should not be vastly larger than discharged debt."
+  condition:
+    type: expression
+    expr: "get_amount('box2_amount_of_debt_discharged', 0) > 0 and get_amount('box7_fair_market_value_property', 0) > get_amount('box2_amount_of_debt_discharged', 0) * 5"
+  references:
+    - source: IRS 1099-C Instructions
+  fields:
+    - "amounts.box7_fair_market_value_property"
+
+- id: C1099_STATE_LIST_LENGTHS_MATCH
+  form_types: ["1099-C"]
+  name: State fields length mismatch
+  severity: warning
+  category: "STATE/LOCAL"
+  description: "State withheld, state IDs, and state income lists should align in length."
+  condition:
+    type: expression
+    expr: "(len(get('state_tax_withheld', [])) not in (0, len(get('state_id', [])), len(get('state_income', [])))) or (len(get('state_id', [])) not in (0, len(get('state_tax_withheld', [])), len(get('state_income', [])))) or (len(get('state_income', [])) not in (0, len(get('state_tax_withheld', [])), len(get('state_id', []))))"
+  references:
+    - source: IRS 1099-C Instructions
+  fields:
+    - "state_tax_withheld"

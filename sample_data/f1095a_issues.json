@@ -1,0 +1,36 @@
+{
+  "doc_id": "f1095a-issues-2024",
+  "doc_type": "1095-A",
+  "tax_year": 2024,
+  "issuer": {
+    "name": "",
+    "ein": "",
+    "address": ""
+  },
+  "recipient": {
+    "name": "Recipient Missing TIN",
+    "tin": "",
+    "address": ""
+  },
+  "covered_individuals": [],
+  "months": [
+    {"month_index": 1, "monthly_premium": -10.0, "slcsp_premium": 0.0, "advance_premium_tax_credit": 100.0},
+    {"month_index": 1, "monthly_premium": 200.0, "slcsp_premium": 0.0, "advance_premium_tax_credit": 100.0},
+    {"month_index": 2, "monthly_premium": 0.0, "slcsp_premium": 0.0, "advance_premium_tax_credit": 50.0},
+    {"month_index": 3, "monthly_premium": 0.0, "slcsp_premium": 300.0, "advance_premium_tax_credit": 0.0},
+    {"month_index": 4, "monthly_premium": 0.0, "slcsp_premium": 0.0, "advance_premium_tax_credit": 0.0},
+    {"month_index": 5, "monthly_premium": 0.0, "slcsp_premium": 0.0, "advance_premium_tax_credit": 0.0},
+    {"month_index": 6, "monthly_premium": 0.0, "slcsp_premium": 0.0, "advance_premium_tax_credit": 0.0},
+    {"month_index": 7, "monthly_premium": 0.0, "slcsp_premium": 0.0, "advance_premium_tax_credit": 0.0},
+    {"month_index": 8, "monthly_premium": 0.0, "slcsp_premium": 0.0, "advance_premium_tax_credit": 0.0},
+    {"month_index": 9, "monthly_premium": 0.0, "slcsp_premium": 0.0, "advance_premium_tax_credit": 0.0},
+    {"month_index": 10, "monthly_premium": 0.0, "slcsp_premium": 0.0, "advance_premium_tax_credit": 0.0},
+    {"month_index": 11, "monthly_premium": 0.0, "slcsp_premium": 0.0, "advance_premium_tax_credit": 0.0},
+    {"month_index": 12, "monthly_premium": 0.0, "slcsp_premium": 0.0, "advance_premium_tax_credit": 0.0}
+  ],
+  "ocr_quality": 0.7,
+  "meta": {
+    "source_pdf_path": "sample_data/f1095a_issues.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

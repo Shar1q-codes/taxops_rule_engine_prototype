@@ -1,0 +1,33 @@
+{
+  "doc_id": "c1099-valid-2024",
+  "doc_type": "1099-C",
+  "tax_year": 2024,
+  "creditor": {
+    "name": "Main Bank",
+    "tin": "98-7654321",
+    "address": "100 Bank Ave, City, ST 00000"
+  },
+  "debtor": {
+    "name": "Morgan Debtor",
+    "tin": "123-45-6789",
+    "address": "200 Home Rd, Town, ST 11111"
+  },
+  "account_number": "ACCT-C-001",
+  "amounts": {
+    "box2_amount_of_debt_discharged": 15000.0,
+    "box3_interest_if_included": 500.0,
+    "box7_fair_market_value_property": 10000.0
+  },
+  "box1_date_of_identifiable_event": "2024-03-15",
+  "box4_debt_description": "Credit card debt",
+  "box5_debtor_personally_liable": true,
+  "box6_identifiable_event_code": "G",
+  "state_tax_withheld": [0.0],
+  "state_id": ["CA"],
+  "state_income": [0.0],
+  "ocr_quality": 1.0,
+  "meta": {
+    "source_pdf_path": "sample_data/c1099_valid.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

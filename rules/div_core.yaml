@@ -1,0 +1,272 @@
+- id: DIV_PAYER_TIN_REQUIRED
+  form_types: ["1099-DIV"]
+  name: Payer TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Payer TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(payer_tin)"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields: ["payer.tin"]
+
+- id: DIV_PAYER_TIN_FORMAT
+  form_types: ["1099-DIV"]
+  name: Payer TIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Payer TIN must be a valid EIN format."
+  condition:
+    type: expression
+    expr: "not is_valid_ein(payer_tin)"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields: ["payer.tin"]
+
+- id: DIV_RECIPIENT_TIN_REQUIRED
+  form_types: ["1099-DIV"]
+  name: Recipient TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Recipient TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(recipient_tin)"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields: ["recipient.tin"]
+
+- id: DIV_RECIPIENT_TIN_FORMAT
+  form_types: ["1099-DIV"]
+  name: Recipient TIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Recipient TIN must be in valid SSN/EIN format."
+  condition:
+    type: expression
+    expr: "not (is_valid_ssn(recipient_tin) or is_valid_ein(recipient_tin))"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields: ["recipient.tin"]
+
+- id: DIV_AMOUNTS_NONNEGATIVE
+  form_types: ["1099-DIV"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "DIVIDENDS"
+  description: "Dividend, gain, and withholding amounts must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([get_amount(k, 0) for k in ['box_1a_total_ordinary_dividends','box_1b_qualified_dividends','box_2a_total_capital_gain_distributions','box_4_federal_income_tax_withheld','box_6_foreign_tax_paid','box_11_section_199a_dividends','box_12_exempt_interest_dividends','box_13_specified_private_activity_bond_interest_dividends']] or [0]) < 0"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields:
+    - "amounts.box_1a_total_ordinary_dividends"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: DIV_ZERO_DOCUMENT_SANITY
+  form_types: ["1099-DIV"]
+  name: All key amounts zero
+  severity: warning
+  category: "DIVIDENDS"
+  description: "All primary dividend, gain, and withholding amounts are zero; likely placeholder or extraction issue."
+  condition:
+    type: expression
+    expr: "sum([get_amount(k, 0) for k in ['box_1a_total_ordinary_dividends','box_2a_total_capital_gain_distributions','box_4_federal_income_tax_withheld','box_6_foreign_tax_paid','box_11_section_199a_dividends','box_12_exempt_interest_dividends','box_13_specified_private_activity_bond_interest_dividends']]) == 0"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields:
+    - "amounts.box_1a_total_ordinary_dividends"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: DIV_QUALIFIED_NOT_EXCEED_ORDINARY
+  form_types: ["1099-DIV"]
+  name: Qualified dividends exceed ordinary
+  severity: error
+  category: "DIVIDENDS"
+  description: "Qualified dividends cannot exceed total ordinary dividends."
+  condition:
+    type: expression
+    expr: "get_amount('box_1b_qualified_dividends', 0) > get_amount('box_1a_total_ordinary_dividends', 0)"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields:
+    - "amounts.box_1a_total_ordinary_dividends"
+    - "amounts.box_1b_qualified_dividends"
+
+- id: DIV_CAP_GAIN_WITH_ZERO_ORDINARY
+  form_types: ["1099-DIV"]
+  name: Capital gain distributions with zero ordinary dividends
+  severity: warning
+  category: "DIVIDENDS"
+  description: "Capital gain distributions reported while ordinary dividends are zero; uncommon, review source."
+  condition:
+    type: expression
+    expr: "get_amount('box_2a_total_capital_gain_distributions', 0) > 0 and get_amount('box_1a_total_ordinary_dividends', 0) <= 0"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields:
+    - "amounts.box_1a_total_ordinary_dividends"
+    - "amounts.box_2a_total_capital_gain_distributions"
+
+- id: DIV_WITHHOLDING_REQUIRES_INCOME
+  form_types: ["1099-DIV"]
+  name: Withholding without dividends
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Federal tax withholding present but no dividends/gains reported."
+  condition:
+    type: expression
+    expr: "get_amount('box_4_federal_income_tax_withheld', 0) > 0 and (get_amount('box_1a_total_ordinary_dividends', 0) + get_amount('box_2a_total_capital_gain_distributions', 0) + get_amount('box_11_section_199a_dividends', 0) + get_amount('box_12_exempt_interest_dividends', 0) + get_amount('box_13_specified_private_activity_bond_interest_dividends', 0)) <= 0"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields:
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: DIV_WITHHOLDING_RATIO_SANITY
+  form_types: ["1099-DIV"]
+  name: Withholding ratio anomaly
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Federal withholding ratio is far outside a plausible band relative to total dividends/gains."
+  condition:
+    type: expression
+    expr: "(get_amount('box_1a_total_ordinary_dividends', 0) + get_amount('box_2a_total_capital_gain_distributions', 0) + get_amount('box_11_section_199a_dividends', 0) + get_amount('box_12_exempt_interest_dividends', 0) + get_amount('box_13_specified_private_activity_bond_interest_dividends', 0)) > 0 and get_amount('box_4_federal_income_tax_withheld', 0) > 0 and (get_amount('box_4_federal_income_tax_withheld', 0) / (get_amount('box_1a_total_ordinary_dividends', 0) + get_amount('box_2a_total_capital_gain_distributions', 0) + get_amount('box_11_section_199a_dividends', 0) + get_amount('box_12_exempt_interest_dividends', 0) + get_amount('box_13_specified_private_activity_bond_interest_dividends', 0)) < 0.02 or get_amount('box_4_federal_income_tax_withheld', 0) / (get_amount('box_1a_total_ordinary_dividends', 0) + get_amount('box_2a_total_capital_gain_distributions', 0) + get_amount('box_11_section_199a_dividends', 0) + get_amount('box_12_exempt_interest_dividends', 0) + get_amount('box_13_specified_private_activity_bond_interest_dividends', 0)) > 0.4)"
+  references:
+    - source: IRS Backup Withholding
+      url: https://www.irs.gov/businesses/small-businesses-self-employed/backup-withholding
+  fields:
+    - "amounts.box_1a_total_ordinary_dividends"
+    - "amounts.box_4_federal_income_tax_withheld"
+
+- id: DIV_FOREIGN_TAX_WITHOUT_COUNTRY
+  form_types: ["1099-DIV"]
+  name: Foreign tax reported without country
+  severity: warning
+  category: "FOREIGN"
+  description: "Foreign tax paid reported but foreign country/possession is missing."
+  condition:
+    type: expression
+    expr: "get_amount('box_6_foreign_tax_paid', 0) > 0 and missing(get('box_7_foreign_country_or_possession', ''))"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields:
+    - "amounts.box_6_foreign_tax_paid"
+    - "box_7_foreign_country_or_possession"
+
+- id: DIV_COUNTRY_WITHOUT_FOREIGN_TAX
+  form_types: ["1099-DIV"]
+  name: Country reported without foreign tax
+  severity: info
+  category: "FOREIGN"
+  description: "Foreign country/possession listed but foreign tax paid is zero."
+  condition:
+    type: expression
+    expr: "get_amount('box_6_foreign_tax_paid', 0) <= 0 and not missing(get('box_7_foreign_country_or_possession', ''))"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields:
+    - "amounts.box_6_foreign_tax_paid"
+    - "box_7_foreign_country_or_possession"
+
+- id: DIV_199A_NOT_EXCEED_ORDINARY
+  form_types: ["1099-DIV"]
+  name: Section 199A dividends exceed ordinary dividends
+  severity: warning
+  category: "DIVIDENDS"
+  description: "Section 199A dividends should not exceed total ordinary dividends."
+  condition:
+    type: expression
+    expr: "get_amount('box_11_section_199a_dividends', 0) > get_amount('box_1a_total_ordinary_dividends', 0)"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields:
+    - "amounts.box_11_section_199a_dividends"
+    - "amounts.box_1a_total_ordinary_dividends"
+
+- id: DIV_PRIVATE_ACTIVITY_NOT_EXCEED_EXEMPT_INT
+  form_types: ["1099-DIV"]
+  name: Private activity bond interest exceeds exempt-interest dividends
+  severity: warning
+  category: "DIVIDENDS"
+  description: "Specified private activity bond interest dividends should not exceed exempt-interest dividends."
+  condition:
+    type: expression
+    expr: "get_amount('box_13_specified_private_activity_bond_interest_dividends', 0) > get_amount('box_12_exempt_interest_dividends', 0)"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields:
+    - "amounts.box_13_specified_private_activity_bond_interest_dividends"
+    - "amounts.box_12_exempt_interest_dividends"
+
+- id: DIV_STATE_TAX_NONNEGATIVE
+  form_types: ["1099-DIV"]
+  name: State tax cannot be negative
+  severity: error
+  category: "STATE/LOCAL"
+  description: "State tax withholding must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([si.get('state_tax_withheld', 0) for si in get('state_items', [])] or [0]) < 0"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields:
+    - "state_items[].state_tax_withheld"
+
+- id: DIV_STATE_CODE_FORMAT
+  form_types: ["1099-DIV"]
+  name: State code format invalid
+  severity: warning
+  category: "STATE/LOCAL"
+  description: "State code on state items is missing or not a valid two-character code."
+  condition:
+    type: expression
+    expr: "any((not si.get('state_code') or len(str(si.get('state_code')).strip()) != 2 or re_match(r'[^A-Za-z]{2}', str(si.get('state_code')).strip())) for si in get('state_items', []))"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields:
+    - "state_items[].state_code"
+
+- id: DIV_REQUIRED_PAYER_INFO
+  form_types: ["1099-DIV"]
+  name: Payer info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Payer name or address information is missing."
+  condition:
+    type: expression
+    expr: "missing(get('payer.name', ''))"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields: ["payer.name"]
+
+- id: DIV_REQUIRED_RECIPIENT_INFO
+  form_types: ["1099-DIV"]
+  name: Recipient info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Recipient name or address information is missing."
+  condition:
+    type: expression
+    expr: "missing(get('recipient.name', '')) or missing(get('recipient.address', ''))"
+  references:
+    - source: IRS 1099-DIV Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1099-div
+  fields: ["recipient.name"]

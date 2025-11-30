@@ -1,0 +1,39 @@
+{
+  "doc_id": "f941-valid-2024q1",
+  "doc_type": "941",
+  "tax_year": 2024,
+  "tax_quarter": 1,
+  "employer": {
+    "name": "Example Employer LLC",
+    "ein": "12-3456789",
+    "address": "100 Employer St, City, ST 00000"
+  },
+  "amounts": {
+    "line_1_num_employees": 10,
+    "line_2_wages_tips_other_comp": 200000.0,
+    "line_3_income_tax_withheld": 30000.0,
+    "line_5a_taxable_ss_wages": 200000.0,
+    "line_5a_ss_tax": 24800.0,
+    "line_5b_taxable_ss_tips": 0.0,
+    "line_5b_ss_tax_tips": 0.0,
+    "line_5c_taxable_medicare_wages": 200000.0,
+    "line_5c_medicare_tax": 5800.0,
+    "line_5d_taxable_addl_medicare_wages": 30000.0,
+    "line_5d_addl_medicare_tax": 270.0,
+    "line_6_total_taxes_before_adjustments": 30870.0,
+    "line_7_current_quarter_fractions_of_cents_adjustment": 0.0,
+    "line_8_tip_adjustment": 0.0,
+    "line_9_sick_pay_adjustment": 0.0,
+    "line_10_total_taxes_after_adjustments": 30870.0,
+    "line_11_total_deposits_for_quarter": 30870.0,
+    "line_12_refundable_credits": 0.0,
+    "line_13_total_taxes_after_credits": 30870.0,
+    "line_14_balance_due": 0.0,
+    "line_15_overpayment": 0.0
+  },
+  "ocr_quality": 1.0,
+  "meta": {
+    "source_pdf_path": "sample_data/f941_valid.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

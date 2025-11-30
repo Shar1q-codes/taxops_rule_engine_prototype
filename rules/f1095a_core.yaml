@@ -1,0 +1,195 @@
+- id: A1095_RECIPIENT_TIN_REQUIRED
+  form_types: ["1095-A"]
+  name: Recipient TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Recipient SSN/TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(recipient_tin)"
+  references:
+    - source: Instructions for Form 1095-A
+      url: https://www.irs.gov/forms-pubs/about-form-1095-a
+  fields: ["recipient.tin"]
+
+- id: A1095_RECIPIENT_TIN_FORMAT
+  form_types: ["1095-A"]
+  name: Recipient TIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Recipient SSN/TIN must be structurally valid."
+  condition:
+    type: expression
+    expr: "not (is_valid_ssn(recipient_tin) or is_valid_ein(recipient_tin))"
+  references:
+    - source: Instructions for Form 1095-A
+      url: https://www.irs.gov/forms-pubs/about-form-1095-a
+  fields: ["recipient.tin"]
+
+- id: A1095_REQUIRED_RECIPIENT_INFO
+  form_types: ["1095-A"]
+  name: Recipient info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Recipient name or address information is missing."
+  condition:
+    type: expression
+    expr: "missing(get('recipient.name', '')) or missing(get('recipient.address', ''))"
+  references:
+    - source: Instructions for Form 1095-A
+      url: https://www.irs.gov/forms-pubs/about-form-1095-a
+  fields: ["recipient.name"]
+
+- id: A1095_REQUIRED_ISSUER_INFO
+  form_types: ["1095-A"]
+  name: Issuer info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Marketplace/issuer name is required."
+  condition:
+    type: expression
+    expr: "missing(get('issuer.name', ''))"
+  references:
+    - source: Instructions for Form 1095-A
+      url: https://www.irs.gov/forms-pubs/about-form-1095-a
+  fields: ["issuer.name"]
+
+- id: A1095_AMOUNTS_NONNEGATIVE
+  form_types: ["1095-A"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Monthly premiums, SLCSP premiums, and APTC amounts must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([(m.get('monthly_premium', 0) or 0) for m in get('months', [])] + [(m.get('slcsp_premium', 0) or 0) for m in get('months', [])] + [(m.get('advance_premium_tax_credit', 0) or 0) for m in get('months', [])] or [0]) < 0"
+  references:
+    - source: Instructions for Form 1095-A
+      url: https://www.irs.gov/forms-pubs/about-form-1095-a
+  fields: ["months[]"]
+
+- id: A1095_ZERO_DOCUMENT_SANITY
+  form_types: ["1095-A"]
+  name: All monthly amounts zero
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "All monthly premiums/SLCSP/APTC amounts are zero; likely placeholder or extraction issue."
+  condition:
+    type: expression
+    expr: "sum([(m.get('monthly_premium', 0) or 0) + (m.get('slcsp_premium', 0) or 0) + (m.get('advance_premium_tax_credit', 0) or 0) for m in get('months', [])]) == 0"
+  references:
+    - source: Instructions for Form 1095-A
+      url: https://www.irs.gov/forms-pubs/about-form-1095-a
+  fields: ["months[]"]
+
+- id: A1095_APTC_WITHOUT_PREMIUM
+  form_types: ["1095-A"]
+  name: APTC without premium
+  severity: warning
+  category: "WITHHOLDING/ADVANCE_CREDIT"
+  description: "Advance premium tax credit reported for a month with zero monthly premium."
+  condition:
+    type: expression
+    expr: "any((m.get('advance_premium_tax_credit', 0) or 0) > 0 and (m.get('monthly_premium', 0) or 0) == 0 for m in get('months', []))"
+  references:
+    - source: Instructions for Form 1095-A
+      url: https://www.irs.gov/forms-pubs/about-form-1095-a
+  fields: ["months[].advance_premium_tax_credit"]
+
+- id: A1095_APTC_WITHOUT_SLCSP
+  form_types: ["1095-A"]
+  name: APTC without SLCSP
+  severity: warning
+  category: "WITHHOLDING/ADVANCE_CREDIT"
+  description: "Advance premium tax credit reported but SLCSP premium is zero or missing."
+  condition:
+    type: expression
+    expr: "any((m.get('advance_premium_tax_credit', 0) or 0) > 0 and (m.get('slcsp_premium', 0) or 0) == 0 for m in get('months', []))"
+  references:
+    - source: Instructions for Form 1095-A
+      url: https://www.irs.gov/forms-pubs/about-form-1095-a
+  fields: ["months[].slcsp_premium"]
+
+- id: A1095_SLCSP_WITHOUT_PREMIUM
+  form_types: ["1095-A"]
+  name: SLCSP without premium
+  severity: warning
+  category: "MATH/CONSISTENCY"
+  description: "SLCSP premium reported while monthly enrollment premium is zero."
+  condition:
+    type: expression
+    expr: "any((m.get('slcsp_premium', 0) or 0) > 0 and (m.get('monthly_premium', 0) or 0) == 0 for m in get('months', []))"
+  references:
+    - source: Instructions for Form 1095-A
+      url: https://www.irs.gov/forms-pubs/about-form-1095-a
+  fields: ["months[].slcsp_premium"]
+
+- id: A1095_PREMIUM_WITHOUT_COVERAGE_PERSON
+  form_types: ["1095-A"]
+  name: Premium reported without covered individuals
+  severity: warning
+  category: "STRUCTURE"
+  description: "Monthly premiums/APTC present but no covered household individuals listed."
+  condition:
+    type: expression
+    expr: "sum([(m.get('monthly_premium', 0) or 0) + (m.get('advance_premium_tax_credit', 0) or 0) for m in get('months', [])]) > 0 and len(get('covered_individuals', [])) == 0"
+  references:
+    - source: Instructions for Form 1095-A
+      url: https://www.irs.gov/forms-pubs/about-form-1095-a
+  fields: ["covered_individuals[]"]
+
+- id: A1095_MONTH_ROW_INCOMPLETE
+  form_types: ["1095-A"]
+  name: Monthly row incomplete
+  severity: warning
+  category: "STRUCTURE"
+  description: "A month has partial data (one or two of A/B/C filled while another is missing)."
+  condition:
+    type: expression
+    expr: "any(((m.get('monthly_premium', 0) or 0) > 0 or (m.get('slcsp_premium', 0) or 0) > 0 or (m.get('advance_premium_tax_credit', 0) or 0) > 0) and ((m.get('monthly_premium', 0) or 0) == 0 or (m.get('slcsp_premium', 0) or 0) == 0 or (m.get('advance_premium_tax_credit', 0) or 0) == 0) for m in get('months', []))"
+  references:
+    - source: Instructions for Form 1095-A
+      url: https://www.irs.gov/forms-pubs/about-form-1095-a
+  fields: ["months[]"]
+
+- id: A1095_MONTH_INDEX_GAP_OR_DUPLICATE
+  form_types: ["1095-A"]
+  name: Month index gaps or duplicates
+  severity: warning
+  category: "STRUCTURE"
+  description: "Month rows are missing expected months or contain duplicates."
+  condition:
+    type: expression
+    expr: "len(set([m.get('month_index') for m in get('months', []) if m.get('month_index')])) != len([m.get('month_index') for m in get('months', []) if m.get('month_index')]) or any(mi not in range(1,13) for mi in [m.get('month_index') for m in get('months', []) if m.get('month_index')])"
+  references:
+    - source: Instructions for Form 1095-A
+      url: https://www.irs.gov/forms-pubs/about-form-1095-a
+  fields: ["months[].month_index"]
+
+- id: A1095_TOTAL_APTC_REASONABLE
+  form_types: ["1095-A"]
+  name: Total APTC exceeds total premiums
+  severity: info
+  category: "WITHHOLDING/ADVANCE_CREDIT"
+  description: "Total advance credit exceeds total monthly premiums; review for completeness."
+  condition:
+    type: expression
+    expr: "sum([m.get('advance_premium_tax_credit', 0) or 0 for m in get('months', [])]) > sum([m.get('monthly_premium', 0) or 0 for m in get('months', [])]) and sum([m.get('monthly_premium', 0) or 0 for m in get('months', [])]) > 0"
+  references:
+    - source: Instructions for Form 1095-A
+      url: https://www.irs.gov/forms-pubs/about-form-1095-a
+  fields: ["months[]"]
+
+- id: A1095_COVERAGE_DATES_PRESENT
+  form_types: ["1095-A"]
+  name: Coverage dates missing
+  severity: warning
+  category: "STRUCTURE"
+  description: "Covered individuals listed but no coverage start/end dates provided."
+  condition:
+    type: expression
+    expr: "len(get('covered_individuals', [])) > 0 and all(missing(ci.get('coverage_start', '')) and missing(ci.get('coverage_end', '')) for ci in get('covered_individuals', []))"
+  references:
+    - source: Instructions for Form 1095-A
+      url: https://www.irs.gov/forms-pubs/about-form-1095-a
+  fields: ["covered_individuals[]"]

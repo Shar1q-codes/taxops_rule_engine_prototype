@@ -1,0 +1,237 @@
+- id: B1099_BROKER_TIN_REQUIRED
+  form_types: ["1099-B"]
+  name: Broker TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Broker/payer TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(get('broker.tin', ''))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["broker.tin"]
+
+- id: B1099_BROKER_TIN_FORMAT
+  form_types: ["1099-B"]
+  name: Broker TIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Broker TIN must be in valid EIN format."
+  condition:
+    type: expression
+    expr: "not is_valid_ein(get('broker.tin', ''))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["broker.tin"]
+
+- id: B1099_RECIPIENT_TIN_REQUIRED
+  form_types: ["1099-B"]
+  name: Recipient TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Recipient TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(recipient_tin)"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["recipient.tin"]
+
+- id: B1099_RECIPIENT_TIN_FORMAT
+  form_types: ["1099-B"]
+  name: Recipient TIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Recipient TIN must be a valid SSN/EIN format."
+  condition:
+    type: expression
+    expr: "not (is_valid_ssn(recipient_tin) or is_valid_ein(recipient_tin))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["recipient.tin"]
+
+- id: B1099_REQUIRED_BROKER_INFO
+  form_types: ["1099-B"]
+  name: Broker info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Broker name or address is missing."
+  condition:
+    type: expression
+    expr: "missing(get('broker.name', '')) or missing(get('broker.address', ''))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["broker.name"]
+
+- id: B1099_REQUIRED_RECIPIENT_INFO
+  form_types: ["1099-B"]
+  name: Recipient info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Recipient name or address is missing."
+  condition:
+    type: expression
+    expr: "missing(get('recipient.name', '')) or missing(get('recipient.address', ''))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["recipient.name"]
+
+- id: B1099_AMOUNTS_NONNEGATIVE
+  form_types: ["1099-B"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Proceeds, cost basis, market discount, wash sale, and withholding should be zero or positive."
+  condition:
+    type: expression
+    expr: "any((tx.get('proceeds_gross', 0) < 0) or (tx.get('cost_or_other_basis', 0) < 0) or (tx.get('accrued_market_discount', 0) < 0) or (tx.get('wash_sale_disallowed', 0) < 0) or (tx.get('federal_income_tax_withheld', 0) < 0) for tx in get('transactions', []))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["transactions[]"]
+
+- id: B1099_ZERO_DOCUMENT_SANITY
+  form_types: ["1099-B"]
+  name: All transaction amounts zero
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "All transactions show zero proceeds and basis; likely placeholder or extraction issue."
+  condition:
+    type: expression
+    expr: "len(get('transactions', [])) > 0 and all((tx.get('proceeds_gross', 0) == 0) and (tx.get('cost_or_other_basis', 0) == 0) and (tx.get('federal_income_tax_withheld', 0) == 0) for tx in get('transactions', []))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["transactions[]"]
+
+- id: B1099_COST_VS_PROCEEDS_SANITY
+  form_types: ["1099-B"]
+  name: Cost basis vs proceeds anomaly
+  severity: warning
+  category: "MATH/CONSISTENCY"
+  description: "Cost basis is zero with significant proceeds, or cost basis is extremely large relative to proceeds."
+  condition:
+    type: expression
+    expr: "any(((tx.get('proceeds_gross', 0) > 1000 and tx.get('cost_or_other_basis', 0) == 0) or (tx.get('cost_or_other_basis', 0) > 0 and tx.get('proceeds_gross', 0) > 0 and tx.get('cost_or_other_basis', 0) > 10 * tx.get('proceeds_gross', 0))) for tx in get('transactions', []))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["transactions[].cost_or_other_basis"]
+
+- id: B1099_MARKET_DISCOUNT_AND_BASIS
+  form_types: ["1099-B"]
+  name: Market discount unusually high
+  severity: warning
+  category: "MATH/CONSISTENCY"
+  description: "Accrued market discount exceeds proceeds or basis; review."
+  condition:
+    type: expression
+    expr: "any(tx.get('accrued_market_discount', 0) > max(tx.get('proceeds_gross', 0), tx.get('cost_or_other_basis', 0)) for tx in get('transactions', []))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["transactions[].accrued_market_discount"]
+
+- id: B1099_WASH_SALE_VS_LOSS
+  form_types: ["1099-B"]
+  name: Wash sale disallowed on non-loss transaction
+  severity: warning
+  category: "MATH/CONSISTENCY"
+  description: "Wash sale disallowed reported where proceeds do not suggest a loss; review."
+  condition:
+    type: expression
+    expr: "any(tx.get('wash_sale_disallowed', 0) > 0 and tx.get('proceeds_gross', 0) > tx.get('cost_or_other_basis', 0) for tx in get('transactions', []))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["transactions[].wash_sale_disallowed"]
+
+- id: B1099_WITHHOLDING_NONNEGATIVE
+  form_types: ["1099-B"]
+  name: Federal withholding negative
+  severity: error
+  category: "WITHHOLDING"
+  description: "Federal income tax withholding must be zero or positive."
+  condition:
+    type: expression
+    expr: "any(tx.get('federal_income_tax_withheld', 0) < 0 for tx in get('transactions', []))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["transactions[].federal_income_tax_withheld"]
+
+- id: B1099_WITHHOLDING_REQUIRES_PROCEEDS
+  form_types: ["1099-B"]
+  name: Withholding without proceeds
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Withholding present but proceeds are zero for a transaction."
+  condition:
+    type: expression
+    expr: "any(tx.get('federal_income_tax_withheld', 0) > 0 and tx.get('proceeds_gross', 0) == 0 for tx in get('transactions', []))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["transactions[].federal_income_tax_withheld"]
+
+- id: B1099_WITHHOLDING_RATIO_SANITY
+  form_types: ["1099-B"]
+  name: Withholding ratio anomaly
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Withholding exceeds 50% of proceeds; review."
+  condition:
+    type: expression
+    expr: "any(tx.get('proceeds_gross', 0) > 0 and (tx.get('federal_income_tax_withheld', 0) / tx.get('proceeds_gross', 0) > 0.5) for tx in get('transactions', []))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["transactions[].federal_income_tax_withheld"]
+
+- id: B1099_BASIS_REPORTED_FLAG_CONSISTENCY
+  form_types: ["1099-B"]
+  name: Basis reported flag inconsistent
+  severity: warning
+  category: "STRUCTURE"
+  description: "Basis reported flag and noncovered security flag appear contradictory."
+  condition:
+    type: expression
+    expr: "any((tx.get('basis_reported_to_irs_flag', False) and tx.get('noncovered_security_flag', False)) or ((not tx.get('basis_reported_to_irs_flag', False)) and (not tx.get('noncovered_security_flag', False))) for tx in get('transactions', []))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["transactions[].basis_reported_to_irs_flag"]
+
+- id: B1099_DATES_PRESENT_FOR_TRANSACTIONS
+  form_types: ["1099-B"]
+  name: Missing dates on transaction
+  severity: warning
+  category: "STRUCTURE"
+  description: "Proceeds reported but acquisition/sale dates missing."
+  condition:
+    type: expression
+    expr: "any(tx.get('proceeds_gross', 0) > 0 and (missing(tx.get('date_acquired')) or missing(tx.get('date_sold'))) for tx in get('transactions', []))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["transactions[].date_acquired"]
+
+- id: B1099_DATES_ORDER_SANITY
+  form_types: ["1099-B"]
+  name: Acquisition date after sale date
+  severity: warning
+  category: "STRUCTURE"
+  description: "Date acquired appears after date sold."
+  condition:
+    type: expression
+    expr: "any(tx.get('date_acquired') and tx.get('date_sold') and tx.get('date_acquired') > tx.get('date_sold') for tx in get('transactions', []))"
+  references:
+    - source: Instructions for Form 1099-B
+      url: https://www.irs.gov/forms-pubs/about-form-1099-b
+  fields: ["transactions[].date_acquired"]

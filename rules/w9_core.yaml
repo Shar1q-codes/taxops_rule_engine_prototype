@@ -1,0 +1,191 @@
+- id: W9_TAXPAYER_NAME_REQUIRED
+  form_types: ["W-9"]
+  name: Taxpayer name missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Taxpayer name (Line 1) is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(get('taxpayer_name', ''))"
+  references:
+    - source: Instructions for Form W-9
+      url: https://www.irs.gov/forms-pubs/about-form-w-9
+  fields: ["taxpayer_name"]
+
+- id: W9_FEDERAL_TAX_CLASS_REQUIRED
+  form_types: ["W-9"]
+  name: Federal tax classification missing
+  severity: warning
+  category: "STRUCTURE"
+  description: "Federal tax classification should be provided and match an allowed value."
+  condition:
+    type: expression
+    expr: "missing(get('federal_tax_classification', ''))"
+  references:
+    - source: Instructions for Form W-9
+      url: https://www.irs.gov/forms-pubs/about-form-w-9
+  fields: ["federal_tax_classification"]
+
+- id: W9_TIN_PRESENT_FOR_CLASS
+  form_types: ["W-9"]
+  name: TIN missing or inconsistent for classification
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "SSN/EIN must be present and appropriate for the selected tax classification."
+  condition:
+    type: expression
+    expr: "(get('federal_tax_classification', '').lower().startswith('individual') and (missing(get('ssn','')) or not missing(get('ein','')))) or (get('federal_tax_classification', '').lower() not in ['', 'individual', 'individual/sole proprietor', 'sole proprietor'] and (missing(get('ein','')) or not missing(get('ssn','')))) or (missing(get('ssn','')) and missing(get('ein','')))"
+  references:
+    - source: Instructions for Form W-9
+      url: https://www.irs.gov/forms-pubs/about-form-w-9
+  fields:
+    - "ssn"
+    - "ein"
+    - "federal_tax_classification"
+
+- id: W9_SSN_FORMAT_VALID
+  form_types: ["W-9"]
+  name: SSN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Provided SSN is not structurally valid."
+  condition:
+    type: expression
+    expr: "not missing(get('ssn','')) and not is_valid_ssn(get('ssn',''))"
+  references:
+    - source: Instructions for Form W-9
+      url: https://www.irs.gov/forms-pubs/about-form-w-9
+  fields: ["ssn"]
+
+- id: W9_EIN_FORMAT_VALID
+  form_types: ["W-9"]
+  name: EIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Provided EIN is not structurally valid."
+  condition:
+    type: expression
+    expr: "not missing(get('ein','')) and not is_valid_ein(get('ein',''))"
+  references:
+    - source: Instructions for Form W-9
+      url: https://www.irs.gov/forms-pubs/about-form-w-9
+  fields: ["ein"]
+
+- id: W9_LLC_CLASS_REQUIRED_WHEN_LLC
+  form_types: ["W-9"]
+  name: LLC tax class missing
+  severity: warning
+  category: "STRUCTURE"
+  description: "LLC tax classification code should be provided when classification is LLC."
+  condition:
+    type: expression
+    expr: "get('federal_tax_classification', '').upper() == 'LLC' and missing(get('llc_tax_class_code', ''))"
+  references:
+    - source: Instructions for Form W-9
+      url: https://www.irs.gov/forms-pubs/about-form-w-9
+  fields: ["llc_tax_class_code"]
+
+- id: W9_ADDRESS_REQUIRED
+  form_types: ["W-9"]
+  name: Address missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Address (street, city, state, ZIP) is required when TIN is provided."
+  condition:
+    type: expression
+    expr: "(not missing(get('ssn','')) or not missing(get('ein',''))) and (missing(get('address_line1', '')) or missing(get('city', '')) or missing(get('state', '')) or missing(get('zip_code', '')))"
+  references:
+    - source: Instructions for Form W-9
+      url: https://www.irs.gov/forms-pubs/about-form-w-9
+  fields:
+    - "address_line1"
+    - "city"
+    - "state"
+    - "zip_code"
+
+- id: W9_STATE_CODE_FORMAT
+  form_types: ["W-9"]
+  name: State code format invalid
+  severity: warning
+  category: "STRUCTURE"
+  description: "State should be a two-letter code."
+  condition:
+    type: expression
+    expr: "not missing(get('state', '')) and (len(str(get('state', '')).strip()) != 2 or re_match(r'[^A-Za-z]{2}', str(get('state', '')).strip()))"
+  references:
+    - source: Instructions for Form W-9
+      url: https://www.irs.gov/forms-pubs/about-form-w-9
+  fields: ["state"]
+
+- id: W9_ZIP_CODE_FORMAT
+  form_types: ["W-9"]
+  name: ZIP code format invalid
+  severity: warning
+  category: "STRUCTURE"
+  description: "ZIP code should be 5 or 9 digits."
+  condition:
+    type: expression
+    expr: "not missing(get('zip_code', '')) and not re_match(r'^\\d{5}(-?\\d{4})?$', str(get('zip_code', '')).strip())"
+  references:
+    - source: Instructions for Form W-9
+      url: https://www.irs.gov/forms-pubs/about-form-w-9
+  fields: ["zip_code"]
+
+- id: W9_EXEMPT_PAYEE_CODE_FORMAT
+  form_types: ["W-9"]
+  name: Exempt payee code format invalid
+  severity: warning
+  category: "STRUCTURE"
+  description: "Exempt payee code should match expected numeric codes."
+  condition:
+    type: expression
+    expr: "not missing(get('exempt_payee_code', '')) and not re_match(r'^[1-9]$', str(get('exempt_payee_code', '')).strip())"
+  references:
+    - source: Instructions for Form W-9
+      url: https://www.irs.gov/forms-pubs/about-form-w-9
+  fields: ["exempt_payee_code"]
+
+- id: W9_FATCA_CODE_PRESENCE
+  form_types: ["W-9"]
+  name: FATCA exemption code unusual
+  severity: warning
+  category: "STRUCTURE"
+  description: "FATCA exemption code present but tax classification may not typically use it."
+  condition:
+    type: expression
+    expr: "not missing(get('fatca_exemption_code', '')) and get('federal_tax_classification', '').lower().startswith('individual')"
+  references:
+    - source: Instructions for Form W-9
+      url: https://www.irs.gov/forms-pubs/about-form-w-9
+  fields: ["fatca_exemption_code"]
+
+- id: W9_CERTIFICATION_SIGNED
+  form_types: ["W-9"]
+  name: Certification not signed
+  severity: warning
+  category: "STRUCTURE"
+  description: "TIN provided but certification/signature not captured."
+  condition:
+    type: expression
+    expr: "(not missing(get('ssn','')) or not missing(get('ein',''))) and not get('certification_signed_flag', False)"
+  references:
+    - source: Instructions for Form W-9
+      url: https://www.irs.gov/forms-pubs/about-form-w-9
+  fields: ["certification_signed_flag"]
+
+- id: W9_ZERO_PLACEHOLDER_SANITY
+  form_types: ["W-9"]
+  name: Placeholder name or TIN detected
+  severity: warning
+  category: "TIN/IDENTITY"
+  description: "Name or TIN appears to be a placeholder (e.g., N/A, 000-00-0000)."
+  condition:
+    type: expression
+    expr: "get('taxpayer_name', '').strip().lower() in ['n/a','na','unknown'] or re_match(r'^(000-00-0000|111-11-1111|999-99-9999)$', str(get('ssn',''))) or re_match(r'^(00-0000000|11-1111111|99-9999999)$', str(get('ein','')))"
+  references:
+    - source: Instructions for Form W-9
+      url: https://www.irs.gov/forms-pubs/about-form-w-9
+  fields:
+    - "taxpayer_name"
+    - "ssn"
+    - "ein"

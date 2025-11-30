@@ -1,0 +1,38 @@
+{
+  "doc_id": "div-valid-2024",
+  "doc_type": "1099-DIV",
+  "tax_year": 2024,
+  "payer": {
+    "name": "Dividend Payer Inc",
+    "tin": "12-3456789",
+    "address": "123 Payer Street, City, ST 00000"
+  },
+  "recipient": {
+    "name": "Jane Doe",
+    "tin": "123-45-6789",
+    "address": "456 Recipient Road, Town, ST 11111"
+  },
+  "amounts": {
+    "box_1a_total_ordinary_dividends": 5000.0,
+    "box_1b_qualified_dividends": 2000.0,
+    "box_2a_total_capital_gain_distributions": 500.0,
+    "box_4_federal_income_tax_withheld": 500.0,
+    "box_6_foreign_tax_paid": 100.0,
+    "box_11_section_199a_dividends": 300.0,
+    "box_12_exempt_interest_dividends": 200.0,
+    "box_13_specified_private_activity_bond_interest_dividends": 50.0,
+    "federal_withholding": 500.0
+  },
+  "box_7_foreign_country_or_possession": "Canada",
+  "state_items": [
+    {
+      "state_code": "CA",
+      "state_tax_withheld": 200.0
+    }
+  ],
+  "ocr_quality": 1.0,
+  "meta": {
+    "source_pdf_path": "sample_data/div_valid.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "doc_id": "f1098-valid-2024",
+  "doc_type": "1098",
+  "tax_year": 2024,
+  "payer": {
+    "name": "Home Lender Corp",
+    "tin": "98-7654321",
+    "address": "100 Lender Lane, City, ST 00000"
+  },
+  "recipient": {
+    "name": "Alice Borrower",
+    "tin": "123-45-6789",
+    "address": "200 Borrower Road, Town, ST 11111"
+  },
+  "amounts": {
+    "box_1_mortgage_interest_received": 12000.0,
+    "box_2_outstanding_mortgage_principal": 250000.0,
+    "box_4_refunded_interest": 0.0,
+    "box_5_mortgage_insurance_premiums": 800.0,
+    "box_6_points_paid_on_purchase": 1500.0
+  },
+  "box_3_mortgage_origination_date": "2020-05-15",
+  "box_7_mortgaged_property_address": "300 Property Ave, City, ST 00000",
+  "box_8_mortgaged_property_account_number": "ACC-12345",
+  "box_9_additional_mortgaged_property_info": "",
+  "ocr_quality": 1.0,
+  "meta": {
+    "source_pdf_path": "sample_data/f1098_valid.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}

@@ -1,0 +1,191 @@
+- id: SSA1099_BENEFICIARY_TIN_REQUIRED
+  form_types: ["SSA-1099"]
+  name: Beneficiary TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Beneficiary TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(get('beneficiary.tin', ''))"
+  references:
+    - source: Form SSA-1099 instructions
+  fields: ["beneficiary.tin"]
+
+- id: SSA1099_BENEFICIARY_TIN_FORMAT
+  form_types: ["SSA-1099"]
+  name: Beneficiary TIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Beneficiary TIN must be a valid SSN/EIN format."
+  condition:
+    type: expression
+    expr: "not (is_valid_ssn(get('beneficiary.tin', '')) or is_valid_ein(get('beneficiary.tin', '')))"
+  references:
+    - source: Form SSA-1099 instructions
+  fields: ["beneficiary.tin"]
+
+- id: SSA1099_BENEFICIARY_INFO_REQUIRED
+  form_types: ["SSA-1099"]
+  name: Beneficiary info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Beneficiary name or address is missing."
+  condition:
+    type: expression
+    expr: "missing(get('beneficiary.name', '')) or missing(get('beneficiary.address', ''))"
+  references:
+    - source: Form SSA-1099 instructions
+  fields: ["beneficiary.name"]
+
+- id: SSA1099_PAYER_INFO_PLAUSIBILITY
+  form_types: ["SSA-1099"]
+  name: Payer info not typical SSA
+  severity: warning
+  category: "STRUCTURE"
+  description: "Payer name is missing or does not resemble the Social Security Administration."
+  condition:
+    type: expression
+    expr: "missing(get('payer.name', '')) or 'SOCIAL SECURITY' not in get('payer.name', '').upper()"
+  references:
+    - source: Form SSA-1099 instructions
+  fields: ["payer.name"]
+
+- id: SSA1099_AMOUNTS_NONNEGATIVE
+  form_types: ["SSA-1099"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Benefits, repayments, net benefits, withholding, and state withholding must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([get_amount(k, 0) for k in ['box_3_benefits_paid','box_4_benefits_repaid','box_5_net_benefits','box_6_voluntary_federal_tax_withheld','box_7_medicare_premiums','box_8_other_deductions_or_adjustments','box_9_state_repayment']] + [min([si.get('state_tax_withheld', 0) for si in get('state_items', [])] or [0])]) < 0"
+  references:
+    - source: Form SSA-1099 instructions
+  fields:
+    - "amounts.box_3_benefits_paid"
+
+- id: SSA1099_ZERO_DOCUMENT_SANITY
+  form_types: ["SSA-1099"]
+  name: All key amounts zero
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Benefits and withholding are zero; likely placeholder or extraction issue."
+  condition:
+    type: expression
+    expr: "get_amount('box_3_benefits_paid', 0) == 0 and get_amount('box_4_benefits_repaid', 0) == 0 and get_amount('box_5_net_benefits', 0) == 0 and get_amount('box_6_voluntary_federal_tax_withheld', 0) == 0"
+  references:
+    - source: Form SSA-1099 instructions
+  fields:
+    - "amounts.box_3_benefits_paid"
+
+- id: SSA1099_NET_BENEFITS_CONSISTENCY
+  form_types: ["SSA-1099"]
+  name: Net benefits inconsistent with paid/repaid
+  severity: error
+  category: "MATH/CONSISTENCY"
+  description: "Net benefits should equal benefits paid minus benefits repaid within tolerance."
+  condition:
+    type: expression
+    expr: "abs(get_amount('box_5_net_benefits', 0) - (get_amount('box_3_benefits_paid', 0) - get_amount('box_4_benefits_repaid', 0))) > 1.0"
+  references:
+    - source: Form SSA-1099 instructions
+  fields:
+    - "amounts.box_5_net_benefits"
+
+- id: SSA1099_REPAID_NOT_EXCEED_PAID
+  form_types: ["SSA-1099"]
+  name: Benefits repaid exceed benefits paid
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Benefits repaid should not exceed benefits paid."
+  condition:
+    type: expression
+    expr: "get_amount('box_4_benefits_repaid', 0) > get_amount('box_3_benefits_paid', 0)"
+  references:
+    - source: Form SSA-1099 instructions
+  fields:
+    - "amounts.box_4_benefits_repaid"
+
+- id: SSA1099_WITHHOLDING_REQUIRES_BENEFITS
+  form_types: ["SSA-1099"]
+  name: Withholding without benefits
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Federal tax withholding reported but benefits/net benefits are zero."
+  condition:
+    type: expression
+    expr: "get_amount('box_6_voluntary_federal_tax_withheld', 0) > 0 and get_amount('box_3_benefits_paid', 0) == 0 and get_amount('box_5_net_benefits', 0) == 0"
+  references:
+    - source: Form SSA-1099 instructions
+  fields:
+    - "amounts.box_6_voluntary_federal_tax_withheld"
+
+- id: SSA1099_WITHHOLDING_RATIO_SANITY
+  form_types: ["SSA-1099"]
+  name: Withholding ratio anomaly
+  severity: warning
+  category: "WITHHOLDING"
+  description: "Federal withholding exceeds 50% of net benefits; review."
+  condition:
+    type: expression
+    expr: "get_amount('box_5_net_benefits', 0) > 0 and get_amount('box_6_voluntary_federal_tax_withheld', 0) / get_amount('box_5_net_benefits', 0) > 0.5"
+  references:
+    - source: Form SSA-1099 instructions
+  fields:
+    - "amounts.box_6_voluntary_federal_tax_withheld"
+
+- id: SSA1099_STATE_TAX_NONNEGATIVE
+  form_types: ["SSA-1099"]
+  name: State tax cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "State tax withholding must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([si.get('state_tax_withheld', 0) for si in get('state_items', [])] or [0]) < 0"
+  references:
+    - source: Form SSA-1099 instructions
+  fields:
+    - "state_items[].state_tax_withheld"
+
+- id: SSA1099_STATE_TAX_VS_BENEFITS_SANITY
+  form_types: ["SSA-1099"]
+  name: State withholding exceeds benefits
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Total state withholding exceeds net benefits; review."
+  condition:
+    type: expression
+    expr: "sum([si.get('state_tax_withheld', 0) for si in get('state_items', [])]) > max(get_amount('box_5_net_benefits', 0), get_amount('box_3_benefits_paid', 0))"
+  references:
+    - source: Form SSA-1099 instructions
+  fields:
+    - "state_items[].state_tax_withheld"
+
+- id: SSA1099_STATE_CODE_FORMAT
+  form_types: ["SSA-1099"]
+  name: State code format invalid
+  severity: warning
+  category: "STRUCTURE"
+  description: "State code should be a two-letter code."
+  condition:
+    type: expression
+    expr: "any((not si.get('state_code') or len(str(si.get('state_code')).strip()) != 2 or re_match(r'[^A-Za-z]{2}', str(si.get('state_code')).strip())) for si in get('state_items', []))"
+  references:
+    - source: Form SSA-1099 instructions
+  fields:
+    - "state_items[].state_code"
+
+- id: SSA1099_PLACEHOLDER_IDENTITY_SANITY
+  form_types: ["SSA-1099"]
+  name: Placeholder beneficiary identity
+  severity: warning
+  category: "TIN/IDENTITY"
+  description: "Beneficiary name or TIN appears to be a placeholder."
+  condition:
+    type: expression
+    expr: "get('beneficiary.name', '').strip().lower() in ['n/a','na','unknown','test'] or re_match(r'^(000-00-0000|111-11-1111|999-99-9999)$', str(get('beneficiary.tin', '')))"
+  references:
+    - source: Form SSA-1099 instructions
+  fields:
+    - "beneficiary.name"

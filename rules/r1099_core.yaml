@@ -1,0 +1,109 @@
+- id: R1099_PAYER_TIN_REQUIRED
+  form_types: ["1099-R"]
+  name: Payer TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Payer TIN must be present."
+  condition:
+    type: expression
+    expr: "missing(get('payer.tin', ''))"
+  references:
+    - source: IRS 1099-R Instructions
+  fields: ["payer.tin"]
+
+- id: R1099_RECIPIENT_TIN_REQUIRED
+  form_types: ["1099-R"]
+  name: Recipient TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Recipient TIN must be present."
+  condition:
+    type: expression
+    expr: "missing(get('recipient.tin', ''))"
+  references:
+    - source: IRS 1099-R Instructions
+  fields: ["recipient.tin"]
+
+- id: R1099_TAX_YEAR_REASONABLE
+  form_types: ["1099-R"]
+  name: Tax year out of range
+  severity: error
+  category: "STRUCTURE"
+  description: "Tax year must be between 2018 and a reasonable future year."
+  condition:
+    type: expression
+    expr: "tax_year is None or tax_year < 2018 or tax_year > (2030 if not supported_years else max(supported_years) + 1)"
+  references:
+    - source: IRS 1099-R Instructions
+  fields: ["tax_year"]
+
+- id: R1099_NONNEGATIVE_AMOUNTS
+  form_types: ["1099-R"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Distributions, taxable amounts, capital gain, withholding, contributions, and state withholding must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([get_amount(k, 0) for k in ['box_1_gross_distribution','box_2a_taxable_amount','box_3_capital_gain_included','box_4_federal_income_tax_withheld','box_5_employee_contributions_or_insurance_premiums','box_6_net_unrealized_appreciation','box_8_other','box_9b_total_employee_contributions','box_10_amount_allocable_to_IRR']] + [min([si.get('state_tax_withheld', 0) for si in get('state_items', [])] or [0])]) < 0"
+  references:
+    - source: IRS 1099-R Instructions
+  fields:
+    - "amounts.box_1_gross_distribution"
+
+- id: R1099_TAXABLE_AMOUNT_NOT_GT_GROSS
+  form_types: ["1099-R"]
+  name: Taxable amount exceeds gross
+  severity: error
+  category: "MATH/CONSISTENCY"
+  description: "Taxable amount (Box 2a) should not exceed gross distribution (Box 1)."
+  condition:
+    type: expression
+    expr: "get_amount('box_1_gross_distribution', 0) > 0 and get_amount('box_2a_taxable_amount', 0) > get_amount('box_1_gross_distribution', 0)"
+  references:
+    - source: IRS 1099-R Instructions
+  fields:
+    - "amounts.box_2a_taxable_amount"
+
+- id: R1099_TOTAL_DISTRIBUTION_FLAG_CONSISTENT
+  form_types: ["1099-R"]
+  name: Total distribution flag inconsistent
+  severity: warning
+  category: "STRUCTURE"
+  description: "If total distribution is indicated, gross distribution should be positive and total distribution percent near 100% if provided."
+  condition:
+    type: expression
+    expr: "get('box_2b_total_distribution', False) and (get_amount('box_1_gross_distribution', 0) <= 0 or (get_amount('box_9a_total_distribution_pct', 0) not in (0, None) and get_amount('box_9a_total_distribution_pct', 0) < 99))"
+  references:
+    - source: IRS 1099-R Instructions
+  fields:
+    - "amounts.box_1_gross_distribution"
+    - "box_9a_total_distribution_pct"
+
+- id: R1099_DISTRIBUTION_CODE_REQUIRED
+  form_types: ["1099-R"]
+  name: Distribution code missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Distribution code (Box 7) must be present."
+  condition:
+    type: expression
+    expr: "missing(get('box_7_distribution_code', '')) and len(get('box_7_distribution_codes', [])) == 0"
+  references:
+    - source: IRS 1099-R Instructions
+  fields:
+    - "box_7_distribution_codes"
+
+- id: R1099_DISTRIBUTION_CODE_VALID
+  form_types: ["1099-R"]
+  name: Distribution code invalid
+  severity: warning
+  category: "STRUCTURE"
+  description: "Distribution code should only contain allowed alphanumeric characters."
+  condition:
+    type: expression
+    expr: "not missing(get('box_7_distribution_code', '')) and not re_match(r'^[0-9A-Z ,]+$', str(get('box_7_distribution_code', '')))"
+  references:
+    - source: IRS 1099-R Instructions
+  fields:
+    - "box_7_distribution_codes"

@@ -1,0 +1,222 @@
+- id: F1098_LENDER_TIN_REQUIRED
+  form_types: ["1098"]
+  name: Lender TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Lender TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(payer_tin)"
+  references:
+    - source: IRS Form 1098 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1098
+  fields: ["payer.tin"]
+
+- id: F1098_LENDER_TIN_FORMAT
+  form_types: ["1098"]
+  name: Lender TIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Lender TIN must be a valid EIN format."
+  condition:
+    type: expression
+    expr: "not is_valid_ein(payer_tin)"
+  references:
+    - source: IRS Form 1098 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1098
+  fields: ["payer.tin"]
+
+- id: F1098_BORROWER_TIN_REQUIRED
+  form_types: ["1098"]
+  name: Borrower TIN missing
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Borrower TIN is required and cannot be blank."
+  condition:
+    type: expression
+    expr: "missing(recipient_tin)"
+  references:
+    - source: IRS Form 1098 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1098
+  fields: ["recipient.tin"]
+
+- id: F1098_BORROWER_TIN_FORMAT
+  form_types: ["1098"]
+  name: Borrower TIN format invalid
+  severity: error
+  category: "TIN/IDENTITY"
+  description: "Borrower TIN must be in valid SSN/EIN format."
+  condition:
+    type: expression
+    expr: "not (is_valid_ssn(recipient_tin) or is_valid_ein(recipient_tin))"
+  references:
+    - source: IRS Form 1098 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1098
+  fields: ["recipient.tin"]
+
+- id: F1098_AMOUNTS_NONNEGATIVE
+  form_types: ["1098"]
+  name: Amounts cannot be negative
+  severity: error
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Interest, principal, refunded interest, insurance premiums, and points must be zero or positive."
+  condition:
+    type: expression
+    expr: "min([get_amount(k, 0) for k in ['box_1_mortgage_interest_received','box_2_outstanding_mortgage_principal','box_4_refunded_interest','box_5_mortgage_insurance_premiums','box_6_points_paid_on_purchase']] or [0]) < 0"
+  references:
+    - source: IRS Form 1098 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1098
+  fields:
+    - "amounts.box_1_mortgage_interest_received"
+    - "amounts.box_2_outstanding_mortgage_principal"
+
+- id: F1098_ZERO_DOCUMENT_SANITY
+  form_types: ["1098"]
+  name: All key amounts zero
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Interest, principal, points, premiums, and refunded interest are all zero; likely placeholder or extraction issue."
+  condition:
+    type: expression
+    expr: "get_amount('box_1_mortgage_interest_received', 0) == 0 and get_amount('box_2_outstanding_mortgage_principal', 0) == 0 and get_amount('box_4_refunded_interest', 0) == 0 and get_amount('box_5_mortgage_insurance_premiums', 0) == 0 and get_amount('box_6_points_paid_on_purchase', 0) == 0"
+  references:
+    - source: IRS Form 1098 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1098
+  fields:
+    - "amounts.box_1_mortgage_interest_received"
+
+- id: F1098_INTEREST_WITHOUT_PRINCIPAL
+  form_types: ["1098"]
+  name: Interest reported without principal
+  severity: warning
+  category: "MATH/CONSISTENCY"
+  description: "Significant mortgage interest reported but outstanding principal is zero or missing."
+  condition:
+    type: expression
+    expr: "get_amount('box_1_mortgage_interest_received', 0) > 100 and get_amount('box_2_outstanding_mortgage_principal', 0) <= 0"
+  references:
+    - source: IRS Form 1098 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1098
+  fields:
+    - "amounts.box_1_mortgage_interest_received"
+    - "amounts.box_2_outstanding_mortgage_principal"
+
+- id: F1098_PRINCIPAL_WITHOUT_INTEREST
+  form_types: ["1098"]
+  name: Principal reported without interest
+  severity: warning
+  category: "MATH/CONSISTENCY"
+  description: "Large principal reported but no mortgage interest received for the year."
+  condition:
+    type: expression
+    expr: "get_amount('box_2_outstanding_mortgage_principal', 0) > 10000 and get_amount('box_1_mortgage_interest_received', 0) == 0"
+  references:
+    - source: IRS Form 1098 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1098
+  fields:
+    - "amounts.box_2_outstanding_mortgage_principal"
+    - "amounts.box_1_mortgage_interest_received"
+
+- id: F1098_REFUNDED_INTEREST_NOT_EXCEED_INTEREST
+  form_types: ["1098"]
+  name: Refunded interest exceeds reported interest
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Refunded interest should not exceed total mortgage interest received."
+  condition:
+    type: expression
+    expr: "get_amount('box_4_refunded_interest', 0) > get_amount('box_1_mortgage_interest_received', 0)"
+  references:
+    - source: IRS Form 1098 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1098
+  fields:
+    - "amounts.box_4_refunded_interest"
+    - "amounts.box_1_mortgage_interest_received"
+
+- id: F1098_POINTS_WITHOUT_INTEREST
+  form_types: ["1098"]
+  name: Points reported without interest
+  severity: warning
+  category: "AMOUNTS/CONSISTENCY"
+  description: "Points paid reported while mortgage interest received is zero; review."
+  condition:
+    type: expression
+    expr: "get_amount('box_6_points_paid_on_purchase', 0) > 0 and get_amount('box_1_mortgage_interest_received', 0) == 0"
+  references:
+    - source: IRS Form 1098 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1098
+  fields:
+    - "amounts.box_6_points_paid_on_purchase"
+    - "amounts.box_1_mortgage_interest_received"
+
+- id: F1098_ORIGINATION_DATE_PRESENT
+  form_types: ["1098"]
+  name: Origination date missing
+  severity: warning
+  category: "STRUCTURE"
+  description: "Mortgage origination date is missing or blank while monetary amounts are reported."
+  condition:
+    type: expression
+    expr: "(get_amount('box_1_mortgage_interest_received', 0) > 0 or get_amount('box_2_outstanding_mortgage_principal', 0) > 0) and missing(get('box_3_mortgage_origination_date', ''))"
+  references:
+    - source: IRS Form 1098 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1098
+  fields: ["box_3_mortgage_origination_date"]
+
+- id: F1098_PROPERTY_ADDRESS_PRESENT
+  form_types: ["1098"]
+  name: Property address missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Mortgaged property address is required when reporting mortgage interest/principal."
+  condition:
+    type: expression
+    expr: "(get_amount('box_1_mortgage_interest_received', 0) > 0 or get_amount('box_2_outstanding_mortgage_principal', 0) > 0) and missing(get('box_7_mortgaged_property_address', ''))"
+  references:
+    - source: IRS Form 1098 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1098
+  fields: ["box_7_mortgaged_property_address"]
+
+- id: F1098_ACCOUNT_OR_PROPERTY_IDENTIFIER_PRESENT
+  form_types: ["1098"]
+  name: No account or property identifier
+  severity: warning
+  category: "STRUCTURE"
+  description: "Provide either a property address or an account number for the mortgaged property."
+  condition:
+    type: expression
+    expr: "missing(get('box_7_mortgaged_property_address', '')) and missing(get('box_8_mortgaged_property_account_number', ''))"
+  references:
+    - source: IRS Form 1098 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1098
+  fields:
+    - "box_7_mortgaged_property_address"
+    - "box_8_mortgaged_property_account_number"
+
+- id: F1098_REQUIRED_LENDER_INFO
+  form_types: ["1098"]
+  name: Lender info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Lender name or address information is missing."
+  condition:
+    type: expression
+    expr: "missing(get('payer.name', ''))"
+  references:
+    - source: IRS Form 1098 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1098
+  fields: ["payer.name"]
+
+- id: F1098_REQUIRED_BORROWER_INFO
+  form_types: ["1098"]
+  name: Borrower info missing
+  severity: error
+  category: "STRUCTURE"
+  description: "Borrower name or address information is missing."
+  condition:
+    type: expression
+    expr: "missing(get('recipient.name', '')) or missing(get('recipient.address', ''))"
+  references:
+    - source: IRS Form 1098 Instructions
+      url: https://www.irs.gov/forms-pubs/about-form-1098
+  fields: ["recipient.name"]

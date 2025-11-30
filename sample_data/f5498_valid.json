@@ -1,0 +1,46 @@
+{
+  "doc_id": "f5498-valid-2024",
+  "doc_type": "5498",
+  "tax_year": 2024,
+  "trustee": {
+    "name": "Retirement Trustee Inc",
+    "tin": "98-7654321",
+    "address": "100 Trustee Way, City, ST 00000"
+  },
+  "participant": {
+    "name": "Jamie Saver",
+    "tin": "123-45-6789",
+    "address": "200 Participant Rd, Town, ST 11111"
+  },
+  "account_number": "ACCT-5498-001",
+  "amounts": {
+    "box1_ira_contributions": 5000.0,
+    "box2_rollover_contributions": 2000.0,
+    "box3_roth_ira_conversion_amount": 0.0,
+    "box4_recharacterized_contributions": 0.0,
+    "box5_fmv_of_account": 15000.0,
+    "box6_life_insurance_cost_in_ira": 0.0,
+    "box7_roth_ira_contributions": 1000.0,
+    "box8_sep_contributions": 0.0,
+    "box9_simple_contributions": 0.0,
+    "box10_roth_ira_fmv_rollovers": 0.0,
+    "box13_rmd_amount": 0.0,
+    "box14_hsa_msa_contributions": 0.0,
+    "box15_other_contributions": 0.0
+  },
+  "box11_required_minimum_distribution_indicator": false,
+  "box12_rmd_date": "",
+  "flags": {
+    "traditional_ira": false,
+    "roth_ira": true,
+    "sep_ira": false,
+    "simple_ira": false,
+    "hsa": false,
+    "esa_cesa": false
+  },
+  "ocr_quality": 1.0,
+  "meta": {
+    "source_pdf_path": "sample_data/f5498_valid.pdf",
+    "extraction_engine_version": "1.0"
+  }
+}
