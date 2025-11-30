@@ -3460,7 +3460,7 @@ def parse_document_bytes(filename: str, data: bytes) -> Dict[str, Any]:
             raise ValueError("Expected JSON object as document root.")
         return doc
 
-        if suffix == ".pdf":
+    if suffix == ".pdf":
         doc_id = Path(filename).stem or uuid.uuid4().hex
         text, used_ocr = extract_text_from_pdf(BytesIO(data))
         form_type = _detect_form_type_from_text(text)
