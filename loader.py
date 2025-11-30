@@ -39,12 +39,35 @@ def _normalize_rules(source: Path, raw: Any) -> List[Dict[str, Any]]:
     else:
         return []
 
+    def _default_rule_type(value: Any) -> str:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return "structural"
+
+    def _default_category(value: Any) -> str:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return "other"
+
+    def _default_summary(rule: Dict[str, Any]) -> str:
+        for key in ("summary", "description", "name", "id", "code"):
+            val = rule.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+        return ""
+
     normalized: List[Dict[str, Any]] = []
     for rule in rules:
         if not isinstance(rule, dict):
             continue
+        rule = dict(rule)
         # Attach source file for observability/debugging.
         rule["_source"] = source.name
+        rule["rule_type"] = _default_rule_type(rule.get("rule_type"))
+        rule["category"] = _default_category(rule.get("category"))
+        rule["summary"] = _default_summary(rule)
+        tags = rule.get("tags") or []
+        rule["tags"] = list(tags) if isinstance(tags, list) else []
         normalized.append(rule)
     return normalized
 

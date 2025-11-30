@@ -20,12 +20,19 @@ def _build_metadata() -> Dict[str, Dict[str, Any]]:
         code = rule.get("id") or rule.get("code")
         if not code:
             continue
+        rule_type = rule.get("rule_type") or "structural"
+        category = rule.get("category") or "other"
+        summary = rule.get("summary") or rule.get("description") or rule.get("name") or code
+        tags = rule.get("tags") or []
         metadata[code] = {
             "code": code,
-            "short_label": rule.get("name") or code,
+            "short_label": summary or code,
             "long_description": rule.get("description") or rule.get("name") or "",
-            "category": rule.get("category") or "",
+            "category": category,
+            "rule_type": rule_type,
+            "summary": summary,
             "severity_default": rule.get("severity") or "",
+            "tags": list(tags) if isinstance(tags, list) else [],
             "irs_reference": "; ".join(
                 f"{ref.get('source', '')} {ref.get('url', '')}".strip()
                 for ref in (rule.get("references") or [])

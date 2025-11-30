@@ -1,6 +1,10 @@
 - id: W2_SSN_FORMAT
   form_types: ["W2"]
   name: Taxpayer SSN format invalid
+  rule_type: structural
+  category: "TIN/IDENTITY"
+  summary: Taxpayer SSN missing or malformed
+  tags: ["W-2", "identity", "ssn"]
   severity: error
   description: "Taxpayer SSN is missing or not in ###-##-#### format (no masking)."
   condition:

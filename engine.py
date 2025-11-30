@@ -112,7 +112,16 @@ def _make_finding(
 ) -> Dict[str, Any]:
     severity = (rule.get("severity") or "warning").lower()
     code = rule.get("id") or rule.get("code")
-    category = rule.get("category")
+    rule_type = (rule.get("rule_type") or "structural") or "structural"
+    category = (rule.get("category") or "other") or "other"
+    summary = rule.get("summary") or rule.get("name") or message or code
+    tags = rule.get("tags") or []
+    extras = rule.get("extras") or {}
+    condition_expr = condition.get("expr") if isinstance(condition, Mapping) else condition
+    field_paths = rule.get("field_paths")
+    if not isinstance(field_paths, list):
+        field_paths = list(fields) if isinstance(fields, list) else []
+
     finding = {
         "id": code,
         "code": code,
@@ -120,16 +129,19 @@ def _make_finding(
         "form_type": form_type,
         "doc_type": form_type or "UNKNOWN",
         "severity": severity,
+        "rule_type": str(rule_type),
+        "category": category,
+        "summary": summary,
         "message": message,
         "citations": citations,
         "fields": fields,
-        "field_paths": list(fields) if isinstance(fields, list) else [],
+        "field_paths": field_paths,
+        "tags": list(tags) if isinstance(tags, list) else [],
         "tax_year": tax_year,
         "rule_source": rule_source,
-        "condition": condition,
+        "condition": condition_expr,
+        "extras": extras if isinstance(extras, Mapping) else {},
     }
-    if category:
-        finding["category"] = category
     if "hint" in rule:
         finding["hint"] = rule["hint"]
     return finding

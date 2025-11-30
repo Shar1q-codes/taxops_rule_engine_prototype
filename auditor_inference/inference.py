@@ -16,6 +16,7 @@ import json
 import math
 import uuid
 import logging
+import time
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -341,8 +342,11 @@ def audit_document(
     # Deterministic findings from the production rule engine
     rule_engine: RuleEngine = default_rule_engine
     rule_issues: List[Dict[str, Any]] = []
+    rule_eval_ms: Optional[int] = None
     try:
+        _rule_start = time.perf_counter()
         rule_issues = rule_engine.evaluate(doc, form_type=doc_type, tax_year=tax_year)
+        rule_eval_ms = int((time.perf_counter() - _rule_start) * 1000)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Rule engine evaluation failed: %s", exc)
         if isinstance(exc, ValueError):
@@ -363,17 +367,22 @@ def audit_document(
             "doc_id": doc_id,
             "source": "RULE_ENGINE_V2",
             "code": issue.get("id"),
-            "category": issue.get("name"),
+            "category": issue.get("category") or issue.get("name"),
             "severity": issue.get("severity"),
-            "summary": issue.get("message"),
+            "rule_type": issue.get("rule_type"),
+            "summary": issue.get("summary") or issue.get("message"),
             "details": issue.get("message"),
             "suggested_action": issue.get("hint") or "Review and correct the highlighted fields.",
             "citation_hint": citation_hint,
-            "tags": issue.get("fields") or [],
+            "tags": issue.get("tags") or issue.get("fields") or [],
             "fields": issue.get("fields") or [],
+            "field_paths": issue.get("field_paths") or [],
             "citations": citations,
             "rule_source": issue.get("rule_source"),
             "condition": issue.get("condition"),
+            "doc_type": issue.get("doc_type") or doc_type,
+            "tax_year": issue.get("tax_year") or tax_year,
+            "extras": issue.get("extras") or {},
         }
 
     rule_findings = [_issue_to_finding(i) for i in rule_issues]
@@ -444,6 +453,7 @@ def audit_document(
         "rule_issues": rule_issues,
         "llm_findings": filtered_llm,
         "merged_findings": merged,
+        "rule_eval_ms": rule_eval_ms,
     }
     return {
         "doc": doc,
@@ -453,6 +463,7 @@ def audit_document(
         "merged_findings": merged,
         "audit_trail": audit_trail,
         "llm_raw": llm_raw,
+        "rule_eval_ms": rule_eval_ms,
     }
 
 

@@ -7,13 +7,13 @@ deterministic + LLM findings from the existing auditor_inference package.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import sys
-import time
+import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,8 +25,12 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
 
+from engine import rule_engine  # noqa: E402
 from auditor_inference.document_extraction import parse_document_bytes  # noqa: E402
 from auditor_inference.inference import audit_document  # noqa: E402
+from backend.reporting import render_audit_report  # noqa: E402
+from backend.schemas import AuditResponse, Citation, DocumentMetadata, EngineInfo, Finding, Summary  # noqa: E402
+from fastapi.responses import HTMLResponse  # noqa: E402
 
 logger = logging.getLogger("taxops-api")
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -98,39 +102,142 @@ def verify_firebase_token(auth_header: Optional[str] = Header(None, alias="Autho
     return decoded
 
 
-@app.get("/health")
-def health() -> Dict[str, str]:
-    return {"status": "ok"}
+def _infer_source(content_type: Optional[str]) -> str:
+    if not content_type:
+        return "upload_binary"
+    lowered = content_type.lower()
+    if "pdf" in lowered:
+        return "upload_pdf"
+    if "json" in lowered:
+        return "upload_json"
+    return "upload_binary"
 
 
-@app.get("/")
-async def root() -> Dict[str, str]:
-    return {"service": "corallo-taxops-backend", "status": "ok"}
+def _map_citations(raw: Any) -> List[Citation]:
+    citations: List[Citation] = []
+    for ref in raw or []:
+        if not isinstance(ref, dict):
+            continue
+        label = ref.get("label") or ref.get("source") or ""
+        url = ref.get("url") or ""
+        citations.append(Citation(label=label, url=url))
+    return citations
 
 
-@app.post("/audit-document")
-async def audit_document_endpoint(
-    file: UploadFile = File(...),
-    doc_type: Optional[str] = Form(None),
-    tax_year: Optional[int] = Form(None),
-    user: Dict[str, Any] = Depends(verify_firebase_token),
-) -> Dict[str, Any]:
-    """Accept a PDF/image/JSON upload, run the auditor pipeline, and return findings."""
-    start = time.time()
+def _normalize_finding(issue: Dict[str, Any], *, default_doc_type: str, default_tax_year: int) -> Finding:
+    cond = issue.get("condition")
+    cond_str = cond.get("expr") if isinstance(cond, dict) else cond
+    fields = issue.get("fields") or []
+    field_paths = issue.get("field_paths") or []
+    return Finding(
+        id=str(issue.get("id") or issue.get("code") or ""),
+        code=str(issue.get("code") or issue.get("id") or ""),
+        severity=str(issue.get("severity") or ""),
+        rule_type=str(issue.get("rule_type") or "structural"),
+        category=issue.get("category"),
+        message=str(issue.get("message") or ""),
+        summary=issue.get("summary"),
+        doc_type=str(issue.get("doc_type") or default_doc_type),
+        tax_year=int(issue.get("tax_year") or default_tax_year or 0),
+        fields=list(fields) if isinstance(fields, list) else [],
+        field_paths=list(field_paths) if isinstance(field_paths, list) else [],
+        citations=_map_citations(issue.get("citations")),
+        rule_source=issue.get("rule_source"),
+        condition=str(cond_str) if cond_str is not None else None,
+        extras=issue.get("extras") or {},
+        tags=list(issue.get("tags") or []),
+    )
+
+
+def _build_summary(findings: List[Finding], total_rules: int) -> Summary:
+    by_severity: Dict[str, int] = {"error": 0, "warning": 0, "info": 0}
+    for f in findings:
+        sev = (f.severity or "").lower()
+        if sev in by_severity:
+            by_severity[sev] += 1
+        else:
+            by_severity[sev] = by_severity.get(sev, 0) + 1
+    by_rule_type: Dict[str, int] = {}
+    for f in findings:
+        rt = f.rule_type
+        if not rt:
+            continue
+        key = str(rt)
+        by_rule_type[key] = by_rule_type.get(key, 0) + 1
+    if not by_rule_type:
+        by_rule_type = {}
+    return Summary(
+        total_rules_evaluated=total_rules,
+        total_findings=len(findings),
+        by_severity=by_severity,
+        by_rule_type=by_rule_type,
+    )
+
+
+def _infer_ruleset(findings: List[Finding]) -> Optional[str]:
+    sources = {f.rule_source for f in findings if f.rule_source}
+    if len(sources) == 1:
+        src = sources.pop()
+        return src.replace(".yaml", "")
+    return None
+
+
+async def _process_audit_upload(
+    file: UploadFile,
+    doc_type: Optional[str],
+    tax_year: Optional[int],
+    user: Dict[str, Any],
+    *,
+    request_id: str,
+    received_at: datetime,
+) -> Any:
+    base_doc_id = Path(file.filename or "upload").stem or f"doc-{uuid.uuid4().hex}"
+    base_tax_year = int(tax_year) if tax_year else 0
+    base_doc_type = doc_type or ""
+    metadata = DocumentMetadata(
+        filename=file.filename,
+        content_type=file.content_type,
+        pages=None,
+        source=_infer_source(file.content_type),
+    )
+
+    def _error_response(status_code: int, *, message: str):
+        processed_at = datetime.now(timezone.utc)
+        resp = AuditResponse(
+            request_id=request_id,
+            doc_id=base_doc_id,
+            doc_type=base_doc_type or "UNKNOWN",
+            tax_year=base_tax_year,
+            received_at=received_at,
+            processed_at=processed_at,
+            status="error",
+            summary=Summary(
+                total_rules_evaluated=0,
+                total_findings=0,
+                by_severity={"error": 0, "warning": 0, "info": 0},
+                by_rule_type={},
+            ),
+            document_metadata=metadata,
+            findings=[],
+            engine=EngineInfo(ruleset=None, version=None, evaluation_time_ms=None),
+        )
+        logger.warning("Audit request %s failed: %s", request_id, message)
+        return fastapi_response(status_code, resp.dict())
+
     content = await file.read()
     if not content:
-        raise HTTPException(status_code=400, detail="Empty file uploaded.")
+        return _error_response(400, message="Empty file uploaded.")
 
     logger.info("Processing upload for user=%s file=%s type=%s", user.get("uid"), file.filename, file.content_type)
     try:
         doc = parse_document_bytes(file.filename or "upload", content)
     except ImportError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Install optional OCR/PDF dependencies on the server to handle this file type: {exc}",
-        ) from exc
+        return _error_response(
+            400,
+            message=f"Install optional OCR/PDF dependencies on the server to handle this file type: {exc}",
+        )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _error_response(400, message=str(exc))
 
     if doc_type:
         doc["doc_type"] = doc_type
@@ -155,27 +262,104 @@ async def audit_document_endpoint(
             http_timeout=settings["http_timeout"],
         )
     except ValueError as exc:
-        # Gracefully surface validation issues (e.g., unsupported tax year) as 400 to the client.
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _error_response(400, message=str(exc))
 
-    elapsed_ms = int((time.time() - start) * 1000)
-    payload = {
-        "processing_time_ms": elapsed_ms,
-        "doc_id": result.get("doc", {}).get("doc_id"),
-        "rule_issues": result.get("rule_issues", []),
-        "rule_findings": result.get("rule_findings", []),
-        "llm_findings": result.get("llm_findings", []),
-        "merged_findings": result.get("merged_findings", []),
-        "audit_trail": {
-            "retrieval_sources": result.get("audit_trail", {}).get("retrieval_sources", []),
-            "timestamp": result.get("audit_trail", {}).get("timestamp"),
-            "llm_mode": result.get("audit_trail", {}).get("llm_mode"),
-            "llm_skipped": result.get("audit_trail", {}).get("llm_skipped"),
-            "rule_issues": result.get("audit_trail", {}).get("rule_issues", []),
-        },
-        "metadata": result.get("audit_trail", {}),
-    }
-    return payload
+    processed_at = datetime.now(timezone.utc)
+    resolved_doc = result.get("doc", {}) if isinstance(result, dict) else {}
+    resolved_doc_id = resolved_doc.get("doc_id") or base_doc_id
+    resolved_doc_type = resolved_doc.get("doc_type") or resolved_doc.get("form_type") or base_doc_type or "UNKNOWN"
+    resolved_tax_year = int(resolved_doc.get("tax_year") or base_tax_year or 0)
+    registry_doc_type = resolved_doc_type
+    if resolved_doc_type and not rule_engine.registry.get_rules(resolved_doc_type):
+        alt = resolved_doc_type.replace("-", "")
+        if rule_engine.registry.get_rules(alt):
+            registry_doc_type = alt
+
+    issues = result.get("rule_issues", []) if isinstance(result, dict) else []
+    findings = [_normalize_finding(i, default_doc_type=resolved_doc_type, default_tax_year=resolved_tax_year) for i in issues if isinstance(i, dict)]
+    total_rules = len(rule_engine.registry.get_rules(registry_doc_type)) if registry_doc_type else 0
+    summary = _build_summary(findings, total_rules)
+    engine_info = EngineInfo(
+        ruleset=_infer_ruleset(findings),
+        version=os.getenv("ENGINE_VERSION"),
+        evaluation_time_ms=result.get("rule_eval_ms") if isinstance(result, dict) else None,
+    )
+
+    response = AuditResponse(
+        request_id=request_id,
+        doc_id=resolved_doc_id,
+        doc_type=str(resolved_doc_type),
+        tax_year=resolved_tax_year,
+        received_at=received_at,
+        processed_at=processed_at,
+        status="ok",
+        summary=summary,
+        document_metadata=DocumentMetadata(
+            filename=metadata.filename or resolved_doc.get("meta", {}).get("source_file"),
+            content_type=metadata.content_type,
+            pages=resolved_doc.get("meta", {}).get("pages") if isinstance(resolved_doc.get("meta"), dict) else None,
+            source=metadata.source or resolved_doc.get("meta", {}).get("source"),
+        ),
+        findings=findings,
+        engine=engine_info,
+    )
+    return response
+
+
+@app.get("/health")
+def health() -> Dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/")
+async def root() -> Dict[str, str]:
+    return {"service": "corallo-taxops-backend", "status": "ok"}
+
+
+@app.post("/audit-document", response_model=AuditResponse)
+async def audit_document_endpoint(
+    file: UploadFile = File(...),
+    doc_type: Optional[str] = Form(None),
+    tax_year: Optional[int] = Form(None),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> Any:
+    """Accept a PDF/image/JSON upload, run the auditor pipeline, and return findings."""
+    received_at = datetime.now(timezone.utc)
+    request_id = uuid.uuid4().hex
+    result = await _process_audit_upload(
+        file,
+        doc_type,
+        tax_year,
+        user,
+        request_id=request_id,
+        received_at=received_at,
+    )
+    return result
+
+
+@app.post("/audit-report", response_class=HTMLResponse)
+async def audit_report_endpoint(
+    file: UploadFile = File(...),
+    doc_type: Optional[str] = Form(None),
+    tax_year: Optional[int] = Form(None),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> Any:
+    """Accept a document, run audit, and return an HTML report."""
+    received_at = datetime.now(timezone.utc)
+    request_id = uuid.uuid4().hex
+    audit_result = await _process_audit_upload(
+        file,
+        doc_type,
+        tax_year,
+        user,
+        request_id=request_id,
+        received_at=received_at,
+    )
+    # Error responses are JSONResponse objects; pass through directly.
+    if not isinstance(audit_result, AuditResponse):
+        return audit_result
+    html = render_audit_report(audit_result)
+    return HTMLResponse(content=html, media_type="text/html")
 
 
 @app.exception_handler(HTTPException)
