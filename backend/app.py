@@ -11,11 +11,12 @@ import logging
 import os
 import sys
 import uuid
+from decimal import Decimal
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
@@ -39,6 +40,15 @@ from backend.schemas import (  # noqa: E402
     FirmInfo,
     FirmSummary,
 )
+from backend.accounting_store import get_transactions, get_trial_balance, save_transactions, save_trial_balance  # noqa: E402
+from backend.books_ingestion import (  # noqa: E402
+    parse_tb_rows_from_csv,
+    parse_tb_rows_from_list,
+    parse_transactions_from_csv,
+    parse_transactions_from_rows,
+)
+from backend.books_rules import BookFinding, run_books_rules  # noqa: E402
+from backend.books_schemas import GLIngestResponse, TrialBalanceIngestResponse  # noqa: E402
 from fastapi.responses import HTMLResponse  # noqa: E402
 
 logger = logging.getLogger("taxops-api")
@@ -344,6 +354,89 @@ async def firm_summary(user: Dict[str, Any] = Depends(verify_firebase_token)) ->
         highSeverityFindings=2,
         upcomingReports=3,
     )
+
+
+@app.post("/api/books/{engagement_id}/trial-balance", response_model=TrialBalanceIngestResponse)
+async def ingest_trial_balance(
+    engagement_id: str,
+    request: Request,
+    file: UploadFile | None = File(None),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> TrialBalanceIngestResponse:
+    """Ingest trial balance CSV or JSON rows."""
+    _ = user
+    try:
+        if file:
+            content = await file.read()
+            if not content:
+                raise ValueError("Empty file uploaded.")
+            rows = parse_tb_rows_from_csv(content.decode("utf-8"))
+        else:
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            if isinstance(body, dict) and "rows" in body:
+                rows = parse_tb_rows_from_list(body.get("rows") or [])
+            elif isinstance(body, list):
+                rows = parse_tb_rows_from_list(body)
+            else:
+                raise ValueError("Provide a CSV file or JSON payload with rows.")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    save_trial_balance(engagement_id, rows)
+    return TrialBalanceIngestResponse(
+        rows_ingested=len(rows),
+        total_debit=sum((r.debit for r in rows), Decimal("0")),
+        total_credit=sum((r.credit for r in rows), Decimal("0")),
+    )
+
+
+@app.post("/api/books/{engagement_id}/gl", response_model=GLIngestResponse)
+async def ingest_general_ledger(
+    engagement_id: str,
+    request: Request,
+    file: UploadFile | None = File(None),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> GLIngestResponse:
+    """Ingest general ledger CSV or JSON rows and group into transactions."""
+    _ = user
+    try:
+        if file:
+            content = await file.read()
+            if not content:
+                raise ValueError("Empty file uploaded.")
+            txns = parse_transactions_from_csv(content.decode("utf-8"))
+        else:
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            if isinstance(body, list):
+                txns = parse_transactions_from_rows(body)
+            elif isinstance(body, dict) and "rows" in body:
+                txns = parse_transactions_from_rows(body.get("rows") or [])
+            else:
+                raise ValueError("Provide a CSV file or JSON payload with rows.")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    save_transactions(engagement_id, txns)
+    total_debit = sum((line.debit for txn in txns for line in txn.lines), Decimal("0"))
+    total_credit = sum((line.credit for txn in txns for line in txn.lines), Decimal("0"))
+    return GLIngestResponse(transactions_ingested=len(txns), total_debit=total_debit, total_credit=total_credit)
+
+
+@app.get("/api/books/{engagement_id}/findings", response_model=List[BookFinding])
+async def books_findings(
+    engagement_id: str,
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> List[BookFinding]:
+    """Run basic Books of Accounts checks."""
+    _ = user
+    findings = run_books_rules(engagement_id)
+    return findings
 
 
 @app.post("/audit-document", response_model=AuditResponse)
