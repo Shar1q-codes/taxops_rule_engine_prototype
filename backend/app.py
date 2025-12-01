@@ -52,6 +52,9 @@ from backend.books_ingestion import (  # noqa: E402
     parse_transactions_from_rows,
 )
 from backend.books_rules import BookFinding, run_books_rules  # noqa: E402
+from backend.domain_rules import DomainFinding  # noqa: E402
+from backend.expense_rules import run_expense_rules  # noqa: E402
+from backend.income_rules import run_income_rules  # noqa: E402
 from backend.books_schemas import GLIngestResponse, TrialBalanceIngestResponse  # noqa: E402
 from fastapi.responses import HTMLResponse  # noqa: E402
 
@@ -511,6 +514,18 @@ async def books_findings(
     _ = user
     findings = run_books_rules(engagement_id)
     return findings
+
+
+@app.get("/api/income/{engagement_id}/findings", response_model=List[DomainFinding])
+async def income_findings(engagement_id: str) -> List[DomainFinding]:
+    """Run income domain rules."""
+    return run_income_rules(engagement_id)
+
+
+@app.get("/api/expenses/{engagement_id}/findings", response_model=List[DomainFinding])
+async def expense_findings(engagement_id: str) -> List[DomainFinding]:
+    """Run expense domain rules."""
+    return run_expense_rules(engagement_id)
 
 
 @app.post("/audit-document", response_model=AuditResponse)
