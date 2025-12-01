@@ -80,3 +80,41 @@ class FirmSummary(BaseModel):
     activeEngagements: int
     highSeverityFindings: int
     upcomingReports: int
+
+
+class User(BaseModel):
+    id: str
+    email: str
+    name: str
+    roles: List[str] = Field(default_factory=list)
+    firmId: Optional[str] = None
+
+
+class EngagementSummary(BaseModel):
+    id: str
+    clientId: str
+    name: str
+    period: str
+    status: str
+    progress: int
+    risk: str
+    summary: Dict[str, Any]
+    createdAt: datetime
+    updatedAt: datetime
+
+
+class Client(BaseModel):
+    id: str
+    name: str
+    code: str
+    status: str
+    industry: str
+    risk: str
+    yearEnd: str
+    createdAt: datetime
+    updatedAt: datetime
+    engagements: Optional[List[EngagementSummary]] = None
+
+
+class MeResponse(BaseModel):
+    user: User

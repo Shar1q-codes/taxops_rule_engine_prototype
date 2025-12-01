@@ -39,6 +39,10 @@ from backend.schemas import (  # noqa: E402
     Summary,
     FirmInfo,
     FirmSummary,
+    User,
+    Client,
+    EngagementSummary,
+    MeResponse,
 )
 from backend.accounting_store import get_transactions, get_trial_balance, save_transactions, save_trial_balance  # noqa: E402
 from backend.books_ingestion import (  # noqa: E402
@@ -101,6 +105,49 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+DEMO_USER = User(
+    id="demo-user",
+    email="demo.cpa@example.com",
+    name="Demo CPA",
+    roles=["partner", "manager"],
+    firmId="firm-demo",
+)
+
+DEMO_ENGAGEMENTS = [
+    EngagementSummary(
+        id="eng-1",
+        clientId="client-1",
+        name="Demo 2024 Books Audit",
+        period="FY2024",
+        status="Fieldwork",
+        progress=65,
+        risk="Medium",
+        summary={
+            "dataReadiness": 70,
+            "modulesRun": 2,
+            "findingsOpen": 3,
+            "highSeverity": 1,
+        },
+        createdAt=datetime(2024, 1, 1),
+        updatedAt=datetime(2024, 6, 1),
+    ),
+]
+
+DEMO_CLIENTS = [
+    Client(
+        id="client-1",
+        name="Demo Manufacturing Co.",
+        code="DEMO-MFG",
+        status="active",
+        industry="Manufacturing",
+        risk="Medium",
+        yearEnd="12/31",
+        createdAt=datetime(2024, 1, 1),
+        updatedAt=datetime(2024, 6, 1),
+        engagements=DEMO_ENGAGEMENTS,
+    ),
+]
 
 
 def verify_firebase_token(auth_header: Optional[str] = Header(None, alias="Authorization")) -> Dict[str, Any]:
@@ -354,6 +401,33 @@ async def firm_summary(user: Dict[str, Any] = Depends(verify_firebase_token)) ->
         highSeverityFindings=2,
         upcomingReports=3,
     )
+
+
+@app.get("/auth/me", response_model=MeResponse)
+async def get_current_user() -> MeResponse:
+    """Stub auth endpoint that always returns a demo user."""
+    return MeResponse(user=DEMO_USER)
+
+
+@app.get("/api/clients", response_model=List[Client])
+async def list_clients() -> List[Client]:
+    return DEMO_CLIENTS
+
+
+@app.get("/api/clients/{client_id}", response_model=Client)
+async def get_client(client_id: str) -> Client:
+    for client in DEMO_CLIENTS:
+        if client.id == client_id:
+            return client
+    raise HTTPException(status_code=404, detail="Client not found")
+
+
+@app.get("/api/clients/{client_id}/engagements", response_model=List[EngagementSummary])
+async def list_client_engagements(client_id: str) -> List[EngagementSummary]:
+    for client in DEMO_CLIENTS:
+        if client.id == client_id:
+            return client.engagements or []
+    raise HTTPException(status_code=404, detail="Client not found")
 
 
 @app.post("/api/books/{engagement_id}/trial-balance", response_model=TrialBalanceIngestResponse)
