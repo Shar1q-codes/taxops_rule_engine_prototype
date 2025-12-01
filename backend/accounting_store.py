@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from backend.accounting_models import BankEntry, PayrollEmployee, PayrollEntry, TrialBalanceRow, Transaction
+from backend.accounting_models import (
+    BankEntry,
+    InventoryItem,
+    InventoryMovement,
+    PayrollEmployee,
+    PayrollEntry,
+    TrialBalanceRow,
+    Transaction,
+)
 
 # Simple in-memory store keyed by engagement id. Replace with a real DB later.
 _store: Dict[str, Dict[str, List]] = {
@@ -13,6 +21,8 @@ _store: Dict[str, Dict[str, List]] = {
 _BANK_ENTRIES: Dict[str, List[BankEntry]] = {}
 _PAYROLL_EMPLOYEES: Dict[str, List[PayrollEmployee]] = {}
 _PAYROLL_ENTRIES: Dict[str, List[PayrollEntry]] = {}
+_INVENTORY_ITEMS: Dict[str, List[InventoryItem]] = {}
+_INVENTORY_MOVEMENTS: Dict[str, List[InventoryMovement]] = {}
 
 
 def save_trial_balance(engagement_id: str, rows: List[TrialBalanceRow]) -> None:
@@ -55,6 +65,22 @@ def get_payroll_entries(engagement_id: str) -> List[PayrollEntry]:
     return _PAYROLL_ENTRIES.get(engagement_id, [])
 
 
+def save_inventory_items(engagement_id: str, items: List[InventoryItem]) -> None:
+    _INVENTORY_ITEMS[engagement_id] = items
+
+
+def get_inventory_items(engagement_id: str) -> List[InventoryItem]:
+    return _INVENTORY_ITEMS.get(engagement_id, [])
+
+
+def save_inventory_movements(engagement_id: str, movements: List[InventoryMovement]) -> None:
+    _INVENTORY_MOVEMENTS[engagement_id] = movements
+
+
+def get_inventory_movements(engagement_id: str) -> List[InventoryMovement]:
+    return _INVENTORY_MOVEMENTS.get(engagement_id, [])
+
+
 def clear_engagement(engagement_id: str) -> None:
     """Test helper to drop any cached rows for an engagement."""
     _store["trial_balances"].pop(engagement_id, None)
@@ -62,3 +88,5 @@ def clear_engagement(engagement_id: str) -> None:
     _BANK_ENTRIES.pop(engagement_id, None)
     _PAYROLL_EMPLOYEES.pop(engagement_id, None)
     _PAYROLL_ENTRIES.pop(engagement_id, None)
+    _INVENTORY_ITEMS.pop(engagement_id, None)
+    _INVENTORY_MOVEMENTS.pop(engagement_id, None)

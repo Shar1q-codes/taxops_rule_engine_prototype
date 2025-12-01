@@ -90,6 +90,28 @@ class PayrollEntry(BaseModel):
     remarks: Optional[str] = None
 
 
+class InventoryItem(BaseModel):
+    """Inventory item master."""
+
+    id: str
+    name: str
+    category: Optional[str] = None
+    unit: Optional[str] = None
+    cost_price: Optional[Decimal] = None
+    selling_price: Optional[Decimal] = None
+
+
+class InventoryMovement(BaseModel):
+    """Inventory movement (stock ledger) entry."""
+
+    id: str
+    item_id: str
+    date: date
+    quantity: Decimal
+    movement_type: Optional[str] = None  # e.g. purchase, sale, write_off
+    reference: Optional[str] = None
+
+
 __all__ = [
     "Account",
     "Counterparty",
@@ -99,4 +121,6 @@ __all__ = [
     "BankEntry",
     "PayrollEmployee",
     "PayrollEntry",
+    "InventoryItem",
+    "InventoryMovement",
 ]

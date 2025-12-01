@@ -45,7 +45,17 @@ from backend.schemas import (  # noqa: E402
     EngagementSummary,
     MeResponse,
 )
-from backend.accounting_store import get_transactions, get_trial_balance, save_transactions, save_trial_balance, save_bank_entries, save_payroll_entries, save_payroll_employees  # noqa: E402
+from backend.accounting_store import (
+    get_transactions,
+    get_trial_balance,
+    save_transactions,
+    save_trial_balance,
+    save_bank_entries,
+    save_payroll_entries,
+    save_payroll_employees,
+    save_inventory_items,
+    save_inventory_movements,
+)  # noqa: E402
 from backend.books_ingestion import (  # noqa: E402
     parse_tb_rows_from_csv,
     parse_tb_rows_from_list,
@@ -60,6 +70,8 @@ from backend.expense_rules import run_expense_rules  # noqa: E402
 from backend.income_rules import run_income_rules  # noqa: E402
 from backend.payroll_ingestion import parse_payroll_employee_csv, parse_payroll_entries_csv  # noqa: E402
 from backend.payroll_rules import run_payroll_rules  # noqa: E402
+from backend.inventory_ingestion import parse_inventory_items_csv, parse_inventory_movements_csv  # noqa: E402
+from backend.inventory_rules import run_inventory_rules  # noqa: E402
 from backend.books_schemas import GLIngestResponse, TrialBalanceIngestResponse  # noqa: E402
 from fastapi.responses import HTMLResponse  # noqa: E402
 
@@ -600,6 +612,50 @@ async def upload_payroll_entries(
 async def payroll_findings(engagement_id: str) -> List[DomainFinding]:
     """Run payroll domain rules."""
     return run_payroll_rules(engagement_id)
+
+
+@app.post("/api/inventory/{engagement_id}/items")
+async def upload_inventory_items(
+    engagement_id: str,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> Dict[str, Any]:
+    """Upload inventory item master CSV."""
+    _ = user
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV item master is supported in this prototype.")
+    content = await file.read()
+    try:
+        items = parse_inventory_items_csv(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse inventory items CSV: {exc}") from exc
+    save_inventory_items(engagement_id, items)
+    return {"engagement_id": engagement_id, "items": len(items)}
+
+
+@app.post("/api/inventory/{engagement_id}/movements")
+async def upload_inventory_movements(
+    engagement_id: str,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> Dict[str, Any]:
+    """Upload inventory movements CSV."""
+    _ = user
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV inventory movements are supported in this prototype.")
+    content = await file.read()
+    try:
+        moves = parse_inventory_movements_csv(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse inventory movements CSV: {exc}") from exc
+    save_inventory_movements(engagement_id, moves)
+    return {"engagement_id": engagement_id, "movements": len(moves)}
+
+
+@app.get("/api/inventory/{engagement_id}/findings", response_model=List[DomainFinding])
+async def inventory_findings(engagement_id: str) -> List[DomainFinding]:
+    """Run inventory domain rules."""
+    return run_inventory_rules(engagement_id)
 
 
 @app.post("/audit-document", response_model=AuditResponse)
