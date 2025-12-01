@@ -11,6 +11,7 @@ from backend.domain_rules import DomainFinding
 def save_domain_findings(db: Session, engagement_id: str, domain: str, findings: Iterable[DomainFinding]) -> None:
     """Replace findings for an engagement+domain with the provided list."""
     db.query(FindingORM).filter(FindingORM.engagement_id == engagement_id, FindingORM.domain == domain).delete()
+    db.flush()
     for f in findings:
         db.add(
             FindingORM(

@@ -83,6 +83,8 @@ from backend.liabilities_ingestion import parse_ap_entries_csv, parse_loan_perio
 from backend.liabilities_rules import run_liabilities_rules  # noqa: E402
 from backend.books_schemas import GLIngestResponse, TrialBalanceIngestResponse  # noqa: E402
 from backend.findings_persistence import save_domain_findings  # noqa: E402
+from backend.engagement_stats import compute_engagement_stats  # noqa: E402
+from backend.schemas import EngagementStatsResponse  # noqa: E402
 from fastapi.responses import HTMLResponse  # noqa: E402
 
 logger = logging.getLogger("taxops-api")
@@ -829,6 +831,37 @@ async def liabilities_findings(engagement_id: str, db: Session = Depends(get_db)
     if findings:
         save_domain_findings(db, engagement_id, "liabilities", findings)
     return findings
+
+
+@app.get("/api/engagements/{engagement_id}/stats", response_model=EngagementStatsResponse)
+async def engagement_stats(engagement_id: str, db: Session = Depends(get_db)) -> EngagementStatsResponse:
+    engagement = db.query(EngagementORM).filter(EngagementORM.id == engagement_id).first()
+    if not engagement:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    return compute_engagement_stats(db, engagement_id)
+
+
+@app.get("/api/engagements/{engagement_id}/findings", response_model=List[DomainFinding])
+async def engagement_findings(engagement_id: str, db: Session = Depends(get_db)) -> List[DomainFinding]:
+    """Return all persisted findings for an engagement across domains."""
+    rows = (
+        db.query(FindingORM)
+        .filter(FindingORM.engagement_id == engagement_id)
+        .order_by(FindingORM.created_at.desc())
+        .all()
+    )
+    return [
+        DomainFinding(
+            id=r.id,
+            engagement_id=r.engagement_id,
+            domain=r.domain,
+            severity=r.severity,
+            code=r.code,
+            message=r.message,
+            metadata=r.metadata_json or {},
+        )
+        for r in rows
+    ]
 
 
 @app.get("/api/engagements/{engagement_id}/findings", response_model=List[DomainFinding])

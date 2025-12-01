@@ -7,6 +7,10 @@ from backend.findings_persistence import save_domain_findings
 def test_findings_persist_and_override():
     init_db()
     with SessionLocal() as db:
+        db.query(FindingORM).delete()
+        db.query(EngagementORM).delete()
+        db.query(ClientORM).delete()
+        db.commit()
         client = ClientORM(name="FClient", code="FC", status="active")
         db.add(client)
         db.flush()

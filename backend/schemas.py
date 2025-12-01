@@ -118,3 +118,17 @@ class Client(BaseModel):
 
 class MeResponse(BaseModel):
     user: User
+
+
+class DomainStats(BaseModel):
+    domain: str
+    high: int
+    medium: int
+    low: int
+    total: int
+
+
+class EngagementStatsResponse(BaseModel):
+    engagement_id: str
+    domains: List[DomainStats]
+    totals: Dict[str, int]
