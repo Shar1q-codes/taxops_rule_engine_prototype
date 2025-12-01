@@ -21,6 +21,7 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
+from sqlalchemy.orm import Session
 
 # Ensure the repo root (auditor_inference, auditor, etc.) is importable when deployed.
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -75,9 +76,13 @@ from backend.payroll_ingestion import parse_payroll_employee_csv, parse_payroll_
 from backend.payroll_rules import run_payroll_rules  # noqa: E402
 from backend.inventory_ingestion import parse_inventory_items_csv, parse_inventory_movements_csv  # noqa: E402
 from backend.inventory_rules import run_inventory_rules  # noqa: E402
+from backend.db import get_db, init_db  # noqa: E402
+from backend.db_models import ClientORM, EngagementORM, FindingORM  # noqa: E402
+from backend.seed import seed_demo_data  # noqa: E402
 from backend.liabilities_ingestion import parse_ap_entries_csv, parse_loan_periods_csv, parse_loans_csv  # noqa: E402
 from backend.liabilities_rules import run_liabilities_rules  # noqa: E402
 from backend.books_schemas import GLIngestResponse, TrialBalanceIngestResponse  # noqa: E402
+from backend.findings_persistence import save_domain_findings  # noqa: E402
 from fastapi.responses import HTMLResponse  # noqa: E402
 
 logger = logging.getLogger("taxops-api")
@@ -130,6 +135,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def startup_event() -> None:
+    init_db()
+    seed_demo_data()
 
 DEMO_USER = User(
     id="demo-user",
@@ -435,24 +446,97 @@ async def get_current_user() -> MeResponse:
 
 
 @app.get("/api/clients", response_model=List[Client])
-async def list_clients() -> List[Client]:
-    return DEMO_CLIENTS
+async def list_clients(db: Session = Depends(get_db)) -> List[Client]:
+    clients = db.query(ClientORM).all()
+    result: List[Client] = []
+    for c in clients:
+        engagements = db.query(EngagementORM).filter(EngagementORM.client_id == c.id).all()
+        result.append(
+            Client(
+                id=c.id,
+                name=c.name,
+                code=c.code or "",
+                status=c.status,
+                industry="General",
+                risk="Medium",
+                yearEnd="12/31",
+                createdAt=c.created_at,
+                updatedAt=c.updated_at,
+                engagements=[
+                    EngagementSummary(
+                        id=e.id,
+                        clientId=c.id,
+                        name=e.name,
+                        period="",
+                        status=e.status,
+                        progress=0,
+                        risk="Medium",
+                        summary={},
+                        createdAt=e.created_at,
+                        updatedAt=e.updated_at,
+                    )
+                    for e in engagements
+                ],
+            )
+        )
+    return result
 
 
 @app.get("/api/clients/{client_id}", response_model=Client)
-async def get_client(client_id: str) -> Client:
-    for client in DEMO_CLIENTS:
-        if client.id == client_id:
-            return client
-    raise HTTPException(status_code=404, detail="Client not found")
+async def get_client(client_id: str, db: Session = Depends(get_db)) -> Client:
+    c = db.query(ClientORM).filter(ClientORM.id == client_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Client not found")
+    engagements = db.query(EngagementORM).filter(EngagementORM.client_id == c.id).all()
+    return Client(
+        id=c.id,
+        name=c.name,
+        code=c.code or "",
+        status=c.status,
+        industry="General",
+        risk="Medium",
+        yearEnd="12/31",
+        createdAt=c.created_at,
+        updatedAt=c.updated_at,
+        engagements=[
+            EngagementSummary(
+                id=e.id,
+                clientId=c.id,
+                name=e.name,
+                period="",
+                status=e.status,
+                progress=0,
+                risk="Medium",
+                summary={},
+                createdAt=e.created_at,
+                updatedAt=e.updated_at,
+            )
+            for e in engagements
+        ],
+    )
 
 
 @app.get("/api/clients/{client_id}/engagements", response_model=List[EngagementSummary])
-async def list_client_engagements(client_id: str) -> List[EngagementSummary]:
-    for client in DEMO_CLIENTS:
-        if client.id == client_id:
-            return client.engagements or []
-    raise HTTPException(status_code=404, detail="Client not found")
+async def list_client_engagements(client_id: str, db: Session = Depends(get_db)) -> List[EngagementSummary]:
+    client = db.query(ClientORM).filter(ClientORM.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    engagements = db.query(EngagementORM).filter(EngagementORM.client_id == client_id).all()
+    return [
+        EngagementSummary(
+            id=e.id,
+            clientId=client_id,
+            name=e.name,
+            period="",
+            status=e.status,
+            progress=0,
+            risk="Medium",
+            summary={},
+            createdAt=e.created_at,
+            updatedAt=e.updated_at,
+        )
+        for e in engagements
+    ]
 
 
 @app.post("/api/books/{engagement_id}/trial-balance", response_model=TrialBalanceIngestResponse)
@@ -531,23 +615,32 @@ async def ingest_general_ledger(
 async def books_findings(
     engagement_id: str,
     user: Dict[str, Any] = Depends(verify_firebase_token),
+    db: Session = Depends(get_db),
 ) -> List[BookFinding]:
     """Run basic Books of Accounts checks."""
     _ = user
     findings = run_books_rules(engagement_id)
+    if findings:
+        save_domain_findings(db, engagement_id, "books", findings)
     return findings
 
 
 @app.get("/api/income/{engagement_id}/findings", response_model=List[DomainFinding])
-async def income_findings(engagement_id: str) -> List[DomainFinding]:
+async def income_findings(engagement_id: str, db: Session = Depends(get_db)) -> List[DomainFinding]:
     """Run income domain rules."""
-    return run_income_rules(engagement_id)
+    findings = run_income_rules(engagement_id)
+    if findings:
+        save_domain_findings(db, engagement_id, "income", findings)
+    return findings
 
 
 @app.get("/api/expenses/{engagement_id}/findings", response_model=List[DomainFinding])
-async def expense_findings(engagement_id: str) -> List[DomainFinding]:
+async def expense_findings(engagement_id: str, db: Session = Depends(get_db)) -> List[DomainFinding]:
     """Run expense domain rules."""
-    return run_expense_rules(engagement_id)
+    findings = run_expense_rules(engagement_id)
+    if findings:
+        save_domain_findings(db, engagement_id, "expense", findings)
+    return findings
 
 
 @app.post("/api/bank/{engagement_id}/statements")
@@ -570,9 +663,12 @@ async def upload_bank_statement(
 
 
 @app.get("/api/bank/{engagement_id}/findings", response_model=List[DomainFinding])
-async def bank_findings(engagement_id: str) -> List[DomainFinding]:
+async def bank_findings(engagement_id: str, db: Session = Depends(get_db)) -> List[DomainFinding]:
     """Run bank domain rules."""
-    return run_bank_rules(engagement_id)
+    findings = run_bank_rules(engagement_id)
+    if findings:
+        save_domain_findings(db, engagement_id, "bank", findings)
+    return findings
 
 
 @app.post("/api/payroll/{engagement_id}/employees")
@@ -614,9 +710,12 @@ async def upload_payroll_entries(
 
 
 @app.get("/api/payroll/{engagement_id}/findings", response_model=List[DomainFinding])
-async def payroll_findings(engagement_id: str) -> List[DomainFinding]:
+async def payroll_findings(engagement_id: str, db: Session = Depends(get_db)) -> List[DomainFinding]:
     """Run payroll domain rules."""
-    return run_payroll_rules(engagement_id)
+    findings = run_payroll_rules(engagement_id)
+    if findings:
+        save_domain_findings(db, engagement_id, "payroll", findings)
+    return findings
 
 
 @app.post("/api/inventory/{engagement_id}/items")
@@ -658,9 +757,12 @@ async def upload_inventory_movements(
 
 
 @app.get("/api/inventory/{engagement_id}/findings", response_model=List[DomainFinding])
-async def inventory_findings(engagement_id: str) -> List[DomainFinding]:
+async def inventory_findings(engagement_id: str, db: Session = Depends(get_db)) -> List[DomainFinding]:
     """Run inventory domain rules."""
-    return run_inventory_rules(engagement_id)
+    findings = run_inventory_rules(engagement_id)
+    if findings:
+        save_domain_findings(db, engagement_id, "inventory", findings)
+    return findings
 
 
 @app.post("/api/liabilities/{engagement_id}/loans")
@@ -721,9 +823,35 @@ async def upload_ap_entries(
 
 
 @app.get("/api/liabilities/{engagement_id}/findings", response_model=List[DomainFinding])
-async def liabilities_findings(engagement_id: str) -> List[DomainFinding]:
+async def liabilities_findings(engagement_id: str, db: Session = Depends(get_db)) -> List[DomainFinding]:
     """Run liabilities domain rules."""
-    return run_liabilities_rules(engagement_id)
+    findings = run_liabilities_rules(engagement_id)
+    if findings:
+        save_domain_findings(db, engagement_id, "liabilities", findings)
+    return findings
+
+
+@app.get("/api/engagements/{engagement_id}/findings", response_model=List[DomainFinding])
+async def engagement_findings(engagement_id: str, db: Session = Depends(get_db)) -> List[DomainFinding]:
+    """Return all persisted findings for an engagement across domains."""
+    rows = (
+        db.query(FindingORM)
+        .filter(FindingORM.engagement_id == engagement_id)
+        .order_by(FindingORM.created_at.desc())
+        .all()
+    )
+    return [
+        DomainFinding(
+            id=r.id,
+            engagement_id=r.engagement_id,
+            domain=r.domain,
+            severity=r.severity,
+            code=r.code,
+            message=r.message,
+            metadata=r.metadata_json or {},
+        )
+        for r in rows
+    ]
 
 
 @app.post("/audit-document", response_model=AuditResponse)
