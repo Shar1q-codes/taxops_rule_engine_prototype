@@ -4,8 +4,11 @@ from typing import Dict, List
 
 from backend.accounting_models import (
     BankEntry,
+    APEntry,
     InventoryItem,
     InventoryMovement,
+    LoanAccount,
+    LoanPeriodEntry,
     PayrollEmployee,
     PayrollEntry,
     TrialBalanceRow,
@@ -23,6 +26,9 @@ _PAYROLL_EMPLOYEES: Dict[str, List[PayrollEmployee]] = {}
 _PAYROLL_ENTRIES: Dict[str, List[PayrollEntry]] = {}
 _INVENTORY_ITEMS: Dict[str, List[InventoryItem]] = {}
 _INVENTORY_MOVEMENTS: Dict[str, List[InventoryMovement]] = {}
+_LOANS: Dict[str, List[LoanAccount]] = {}
+_LOAN_PERIODS: Dict[str, List[LoanPeriodEntry]] = {}
+_AP_ENTRIES: Dict[str, List[APEntry]] = {}
 
 
 def save_trial_balance(engagement_id: str, rows: List[TrialBalanceRow]) -> None:
@@ -81,6 +87,30 @@ def get_inventory_movements(engagement_id: str) -> List[InventoryMovement]:
     return _INVENTORY_MOVEMENTS.get(engagement_id, [])
 
 
+def save_loans(engagement_id: str, loans: List[LoanAccount]) -> None:
+    _LOANS[engagement_id] = loans
+
+
+def get_loans(engagement_id: str) -> List[LoanAccount]:
+    return _LOANS.get(engagement_id, [])
+
+
+def save_loan_periods(engagement_id: str, periods: List[LoanPeriodEntry]) -> None:
+    _LOAN_PERIODS[engagement_id] = periods
+
+
+def get_loan_periods(engagement_id: str) -> List[LoanPeriodEntry]:
+    return _LOAN_PERIODS.get(engagement_id, [])
+
+
+def save_ap_entries(engagement_id: str, entries: List[APEntry]) -> None:
+    _AP_ENTRIES[engagement_id] = entries
+
+
+def get_ap_entries(engagement_id: str) -> List[APEntry]:
+    return _AP_ENTRIES.get(engagement_id, [])
+
+
 def clear_engagement(engagement_id: str) -> None:
     """Test helper to drop any cached rows for an engagement."""
     _store["trial_balances"].pop(engagement_id, None)
@@ -90,3 +120,6 @@ def clear_engagement(engagement_id: str) -> None:
     _PAYROLL_ENTRIES.pop(engagement_id, None)
     _INVENTORY_ITEMS.pop(engagement_id, None)
     _INVENTORY_MOVEMENTS.pop(engagement_id, None)
+    _LOANS.pop(engagement_id, None)
+    _LOAN_PERIODS.pop(engagement_id, None)
+    _AP_ENTRIES.pop(engagement_id, None)

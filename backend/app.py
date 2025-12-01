@@ -55,6 +55,9 @@ from backend.accounting_store import (
     save_payroll_employees,
     save_inventory_items,
     save_inventory_movements,
+    save_loans,
+    save_loan_periods,
+    save_ap_entries,
 )  # noqa: E402
 from backend.books_ingestion import (  # noqa: E402
     parse_tb_rows_from_csv,
@@ -72,6 +75,8 @@ from backend.payroll_ingestion import parse_payroll_employee_csv, parse_payroll_
 from backend.payroll_rules import run_payroll_rules  # noqa: E402
 from backend.inventory_ingestion import parse_inventory_items_csv, parse_inventory_movements_csv  # noqa: E402
 from backend.inventory_rules import run_inventory_rules  # noqa: E402
+from backend.liabilities_ingestion import parse_ap_entries_csv, parse_loan_periods_csv, parse_loans_csv  # noqa: E402
+from backend.liabilities_rules import run_liabilities_rules  # noqa: E402
 from backend.books_schemas import GLIngestResponse, TrialBalanceIngestResponse  # noqa: E402
 from fastapi.responses import HTMLResponse  # noqa: E402
 
@@ -656,6 +661,69 @@ async def upload_inventory_movements(
 async def inventory_findings(engagement_id: str) -> List[DomainFinding]:
     """Run inventory domain rules."""
     return run_inventory_rules(engagement_id)
+
+
+@app.post("/api/liabilities/{engagement_id}/loans")
+async def upload_loans(
+    engagement_id: str,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> Dict[str, Any]:
+    """Upload loan master CSV."""
+    _ = user
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV loans file is supported in this prototype.")
+    content = await file.read()
+    try:
+        loans = parse_loans_csv(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse loans CSV: {exc}") from exc
+    save_loans(engagement_id, loans)
+    return {"engagement_id": engagement_id, "loans": len(loans)}
+
+
+@app.post("/api/liabilities/{engagement_id}/loan-periods")
+async def upload_loan_periods(
+    engagement_id: str,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> Dict[str, Any]:
+    """Upload loan period schedule CSV."""
+    _ = user
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV loan periods file is supported in this prototype.")
+    content = await file.read()
+    try:
+        periods = parse_loan_periods_csv(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse loan periods CSV: {exc}") from exc
+    save_loan_periods(engagement_id, periods)
+    return {"engagement_id": engagement_id, "periods": len(periods)}
+
+
+@app.post("/api/liabilities/{engagement_id}/ap")
+async def upload_ap_entries(
+    engagement_id: str,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> Dict[str, Any]:
+    """Upload AP ledger CSV."""
+    _ = user
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV AP ledger file is supported in this prototype.")
+    content = await file.read()
+    try:
+        entries = parse_ap_entries_csv(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse AP CSV: {exc}") from exc
+    save_ap_entries(engagement_id, entries)
+    return {"engagement_id": engagement_id, "entries": len(entries)}
+
+
+@app.get("/api/liabilities/{engagement_id}/findings", response_model=List[DomainFinding])
+async def liabilities_findings(engagement_id: str) -> List[DomainFinding]:
+    """Run liabilities domain rules."""
+    return run_liabilities_rules(engagement_id)
 
 
 @app.post("/audit-document", response_model=AuditResponse)

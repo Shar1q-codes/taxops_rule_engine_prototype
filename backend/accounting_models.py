@@ -112,6 +112,42 @@ class InventoryMovement(BaseModel):
     reference: Optional[str] = None
 
 
+class LoanAccount(BaseModel):
+    """Loan master/schedule."""
+
+    id: str
+    lender_name: str
+    opening_principal: Decimal
+    interest_rate_annual: Decimal
+    start_date: date
+    maturity_date: Optional[date] = None
+
+
+class LoanPeriodEntry(BaseModel):
+    """Loan period-level entry (for a schedule)."""
+
+    id: str
+    loan_id: str
+    period_end: date
+    opening_principal: Decimal
+    interest_expense: Decimal
+    principal_repayment: Decimal
+    closing_principal: Decimal
+
+
+class APEntry(BaseModel):
+    """Accounts payable ledger entry."""
+
+    id: str
+    vendor_id: str
+    vendor_name: str
+    invoice_id: str
+    due_date: date
+    amount: Decimal
+    paid: bool = False
+    payment_date: Optional[date] = None
+
+
 __all__ = [
     "Account",
     "Counterparty",
@@ -123,4 +159,7 @@ __all__ = [
     "PayrollEntry",
     "InventoryItem",
     "InventoryMovement",
+    "LoanAccount",
+    "LoanPeriodEntry",
+    "APEntry",
 ]
