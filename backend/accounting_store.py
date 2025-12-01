@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from backend.accounting_models import TrialBalanceRow, Transaction
+from backend.accounting_models import BankEntry, TrialBalanceRow, Transaction
 
 # Simple in-memory store keyed by engagement id. Replace with a real DB later.
 _store: Dict[str, Dict[str, List]] = {
     "trial_balances": {},
     "transactions": {},
 }
+
+_BANK_ENTRIES: Dict[str, List[BankEntry]] = {}
 
 
 def save_trial_balance(engagement_id: str, rows: List[TrialBalanceRow]) -> None:
@@ -27,7 +29,16 @@ def get_transactions(engagement_id: str) -> List[Transaction]:
     return _store["transactions"].get(engagement_id, [])
 
 
+def save_bank_entries(engagement_id: str, entries: List[BankEntry]) -> None:
+    _BANK_ENTRIES[engagement_id] = entries
+
+
+def get_bank_entries(engagement_id: str) -> List[BankEntry]:
+    return _BANK_ENTRIES.get(engagement_id, [])
+
+
 def clear_engagement(engagement_id: str) -> None:
     """Test helper to drop any cached rows for an engagement."""
     _store["trial_balances"].pop(engagement_id, None)
     _store["transactions"].pop(engagement_id, None)
+    _BANK_ENTRIES.pop(engagement_id, None)

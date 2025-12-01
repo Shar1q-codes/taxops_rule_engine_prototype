@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time as dt_time
 from decimal import Decimal
 from typing import Dict, List, Literal, Optional
 
@@ -55,10 +55,24 @@ class TrialBalanceRow(BaseModel):
     closing_balance: Decimal
 
 
+class BankEntry(BaseModel):
+    """Normalized bank statement entry."""
+
+    id: str
+    date: date
+    time: Optional[dt_time] = None
+    description: str
+    amount: Decimal  # positive for inflow, negative for outflow
+    balance: Optional[Decimal] = None
+    account_number: Optional[str] = None
+    reference: Optional[str] = None
+
+
 __all__ = [
     "Account",
     "Counterparty",
     "TransactionLine",
     "Transaction",
     "TrialBalanceRow",
+    "BankEntry",
 ]

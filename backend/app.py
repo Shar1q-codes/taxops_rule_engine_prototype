@@ -11,6 +11,7 @@ import logging
 import os
 import sys
 import uuid
+import io
 from decimal import Decimal
 from pathlib import Path
 from datetime import datetime, timezone
@@ -44,13 +45,15 @@ from backend.schemas import (  # noqa: E402
     EngagementSummary,
     MeResponse,
 )
-from backend.accounting_store import get_transactions, get_trial_balance, save_transactions, save_trial_balance  # noqa: E402
+from backend.accounting_store import get_transactions, get_trial_balance, save_transactions, save_trial_balance, save_bank_entries  # noqa: E402
 from backend.books_ingestion import (  # noqa: E402
     parse_tb_rows_from_csv,
     parse_tb_rows_from_list,
     parse_transactions_from_csv,
     parse_transactions_from_rows,
 )
+from backend.bank_ingestion import parse_bank_csv  # noqa: E402
+from backend.bank_rules import run_bank_rules  # noqa: E402
 from backend.books_rules import BookFinding, run_books_rules  # noqa: E402
 from backend.domain_rules import DomainFinding  # noqa: E402
 from backend.expense_rules import run_expense_rules  # noqa: E402
@@ -526,6 +529,31 @@ async def income_findings(engagement_id: str) -> List[DomainFinding]:
 async def expense_findings(engagement_id: str) -> List[DomainFinding]:
     """Run expense domain rules."""
     return run_expense_rules(engagement_id)
+
+
+@app.post("/api/bank/{engagement_id}/statements")
+async def upload_bank_statement(
+    engagement_id: str,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> Dict[str, Any]:
+    """Upload and parse a bank statement CSV for an engagement."""
+    _ = user
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV bank statements are supported in this prototype.")
+    content = await file.read()
+    try:
+        entries = parse_bank_csv(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse bank CSV: {exc}") from exc
+    save_bank_entries(engagement_id, entries)
+    return {"engagement_id": engagement_id, "entries": len(entries)}
+
+
+@app.get("/api/bank/{engagement_id}/findings", response_model=List[DomainFinding])
+async def bank_findings(engagement_id: str) -> List[DomainFinding]:
+    """Run bank domain rules."""
+    return run_bank_rules(engagement_id)
 
 
 @app.post("/audit-document", response_model=AuditResponse)
