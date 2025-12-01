@@ -68,6 +68,28 @@ class BankEntry(BaseModel):
     reference: Optional[str] = None
 
 
+class PayrollEmployee(BaseModel):
+    """Employee master data for payroll."""
+
+    id: str
+    name: str
+    bank_account: Optional[str] = None
+    department: Optional[str] = None
+    active: bool = True
+
+
+class PayrollEntry(BaseModel):
+    """Payroll entry for a given period."""
+
+    id: str
+    employee_id: str
+    period: date
+    gross_pay: Decimal
+    net_pay: Decimal
+    bank_account: Optional[str] = None
+    remarks: Optional[str] = None
+
+
 __all__ = [
     "Account",
     "Counterparty",
@@ -75,4 +97,6 @@ __all__ = [
     "Transaction",
     "TrialBalanceRow",
     "BankEntry",
+    "PayrollEmployee",
+    "PayrollEntry",
 ]

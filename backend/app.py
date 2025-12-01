@@ -45,7 +45,7 @@ from backend.schemas import (  # noqa: E402
     EngagementSummary,
     MeResponse,
 )
-from backend.accounting_store import get_transactions, get_trial_balance, save_transactions, save_trial_balance, save_bank_entries  # noqa: E402
+from backend.accounting_store import get_transactions, get_trial_balance, save_transactions, save_trial_balance, save_bank_entries, save_payroll_entries, save_payroll_employees  # noqa: E402
 from backend.books_ingestion import (  # noqa: E402
     parse_tb_rows_from_csv,
     parse_tb_rows_from_list,
@@ -58,6 +58,8 @@ from backend.books_rules import BookFinding, run_books_rules  # noqa: E402
 from backend.domain_rules import DomainFinding  # noqa: E402
 from backend.expense_rules import run_expense_rules  # noqa: E402
 from backend.income_rules import run_income_rules  # noqa: E402
+from backend.payroll_ingestion import parse_payroll_employee_csv, parse_payroll_entries_csv  # noqa: E402
+from backend.payroll_rules import run_payroll_rules  # noqa: E402
 from backend.books_schemas import GLIngestResponse, TrialBalanceIngestResponse  # noqa: E402
 from fastapi.responses import HTMLResponse  # noqa: E402
 
@@ -554,6 +556,50 @@ async def upload_bank_statement(
 async def bank_findings(engagement_id: str) -> List[DomainFinding]:
     """Run bank domain rules."""
     return run_bank_rules(engagement_id)
+
+
+@app.post("/api/payroll/{engagement_id}/employees")
+async def upload_payroll_employees(
+    engagement_id: str,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> Dict[str, Any]:
+    """Upload payroll employee master CSV."""
+    _ = user
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV employee master is supported in this prototype.")
+    content = await file.read()
+    try:
+        employees = parse_payroll_employee_csv(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse payroll employees CSV: {exc}") from exc
+    save_payroll_employees(engagement_id, employees)
+    return {"engagement_id": engagement_id, "employees": len(employees)}
+
+
+@app.post("/api/payroll/{engagement_id}/entries")
+async def upload_payroll_entries(
+    engagement_id: str,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> Dict[str, Any]:
+    """Upload payroll entries CSV."""
+    _ = user
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV payroll exports are supported in this prototype.")
+    content = await file.read()
+    try:
+        entries = parse_payroll_entries_csv(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse payroll entries CSV: {exc}") from exc
+    save_payroll_entries(engagement_id, entries)
+    return {"engagement_id": engagement_id, "entries": len(entries)}
+
+
+@app.get("/api/payroll/{engagement_id}/findings", response_model=List[DomainFinding])
+async def payroll_findings(engagement_id: str) -> List[DomainFinding]:
+    """Run payroll domain rules."""
+    return run_payroll_rules(engagement_id)
 
 
 @app.post("/audit-document", response_model=AuditResponse)

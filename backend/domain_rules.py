@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 class DomainFinding(BaseModel):
     id: str
     engagement_id: str
-    domain: Literal["income", "expense", "bank"]
+    domain: Literal["income", "expense", "bank", "payroll"]
     severity: Literal["low", "medium", "high", "critical"]
     code: str
     message: str
