@@ -67,3 +67,16 @@ class AuditResponse(BaseModel):
 class AuditReportParams(BaseModel):
     doc_type: Optional[str] = None
     tax_year: Optional[int] = None
+
+
+class FirmInfo(BaseModel):
+    id: str
+    name: str
+    logo_url: Optional[str] = None
+
+
+class FirmSummary(BaseModel):
+    totalClients: int
+    activeEngagements: int
+    highSeverityFindings: int
+    upcomingReports: int

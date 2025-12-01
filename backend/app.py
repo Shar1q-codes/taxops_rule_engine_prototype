@@ -29,7 +29,16 @@ from engine import rule_engine  # noqa: E402
 from auditor_inference.document_extraction import parse_document_bytes  # noqa: E402
 from auditor_inference.inference import audit_document  # noqa: E402
 from backend.reporting import render_audit_report  # noqa: E402
-from backend.schemas import AuditResponse, Citation, DocumentMetadata, EngineInfo, Finding, Summary  # noqa: E402
+from backend.schemas import (  # noqa: E402
+    AuditResponse,
+    Citation,
+    DocumentMetadata,
+    EngineInfo,
+    Finding,
+    Summary,
+    FirmInfo,
+    FirmSummary,
+)
 from fastapi.responses import HTMLResponse  # noqa: E402
 
 logger = logging.getLogger("taxops-api")
@@ -314,6 +323,27 @@ def health() -> Dict[str, str]:
 @app.get("/")
 async def root() -> Dict[str, str]:
     return {"service": "corallo-taxops-backend", "status": "ok"}
+
+
+@app.get("/api/firm/info", response_model=FirmInfo)
+async def firm_info(user: Dict[str, Any] = Depends(verify_firebase_token)) -> FirmInfo:
+    """Return firm metadata for the authenticated user."""
+    firm_id = user.get("firm_id") or user.get("firmId") or "firm-demo"
+    firm_name = user.get("firm_name") or user.get("firmName") or "TaxOps Firm"
+    logo_url = user.get("firm_logo_url") or user.get("firmLogoUrl")
+    return FirmInfo(id=str(firm_id), name=str(firm_name), logo_url=logo_url)
+
+
+@app.get("/api/firm/summary", response_model=FirmSummary)
+async def firm_summary(user: Dict[str, Any] = Depends(verify_firebase_token)) -> FirmSummary:
+    """Return simple firm-level dashboard counts. Replace with real data source when available."""
+    _ = user  # token validation already performed
+    return FirmSummary(
+        totalClients=10,
+        activeEngagements=5,
+        highSeverityFindings=2,
+        upcomingReports=3,
+    )
 
 
 @app.post("/audit-document", response_model=AuditResponse)

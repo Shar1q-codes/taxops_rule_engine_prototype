@@ -6,3 +6,4 @@
 [build.environment]
   NEXT_TELEMETRY_DISABLED = "1"
   NETLIFY_NEXT_PLUGIN_SKIP = "false"
+  # Configure NEXT_PUBLIC_API_BASE_URL in Netlify UI to point to the deployed backend (e.g., https://api.taxops.example.com)
