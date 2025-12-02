@@ -4,7 +4,7 @@ import os
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, String, Text
+from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.types import JSON
 
 from backend.db import Base
@@ -54,3 +54,29 @@ class FindingORM(Base):
     message = Column(Text, nullable=False)
     metadata_json = Column(JSONType, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class DocumentORM(Base):
+    __tablename__ = "documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    engagement_id = Column(String, ForeignKey("engagements.id"), index=True)
+    filename = Column(String, nullable=False)
+    content = Column(LargeBinary, nullable=False)
+    type = Column(String, nullable=False)
+    amount = Column(Float, nullable=True)
+    date = Column(Date, nullable=True)
+    counterparty = Column(String, nullable=True)
+    external_ref = Column(String, nullable=True)
+    uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    uploaded_by = Column(String, default="demo", nullable=False)
+
+
+class DocumentLinkORM(Base):
+    __tablename__ = "document_links"
+
+    id = Column(Integer, primary_key=True)
+    engagement_id = Column(String, ForeignKey("engagements.id"), index=True)
+    domain = Column(String, nullable=False)
+    entry_id = Column(String, nullable=False)
+    doc_id = Column(Integer, ForeignKey("documents.id"), nullable=False)

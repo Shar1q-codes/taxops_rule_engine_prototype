@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
@@ -37,7 +37,7 @@ class Summary(BaseModel):
     by_rule_type: Dict[str, int]
 
 
-class DocumentMetadata(BaseModel):
+class AuditDocumentMetadata(BaseModel):
     filename: Optional[str] = None
     content_type: Optional[str] = None
     pages: Optional[int] = None
@@ -59,7 +59,7 @@ class AuditResponse(BaseModel):
     processed_at: datetime
     status: str
     summary: Summary
-    document_metadata: DocumentMetadata
+    document_metadata: AuditDocumentMetadata
     findings: List[Finding]
     engine: EngineInfo
 
@@ -132,3 +132,23 @@ class EngagementStatsResponse(BaseModel):
     engagement_id: str
     domains: List[DomainStats]
     totals: Dict[str, int]
+
+
+class DocumentMetadata(BaseModel):
+    id: int
+    engagement_id: str
+    filename: str
+    type: str
+    amount: Optional[float] = None
+    date: Optional[date] = None
+    counterparty: Optional[str] = None
+    external_ref: Optional[str] = None
+    uploaded_at: datetime
+    uploaded_by: str
+
+    class Config:
+        orm_mode = True
+
+
+class DocumentListResponse(BaseModel):
+    documents: List[DocumentMetadata]

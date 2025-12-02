@@ -12,6 +12,7 @@ import os
 import sys
 import uuid
 import io
+import json
 from decimal import Decimal
 from pathlib import Path
 from datetime import datetime, timezone
@@ -33,8 +34,10 @@ from auditor_inference.document_extraction import parse_document_bytes  # noqa: 
 from auditor_inference.inference import audit_document  # noqa: E402
 from backend.reporting import render_audit_report  # noqa: E402
 from backend.schemas import (  # noqa: E402
+    AuditDocumentMetadata,
     AuditResponse,
     Citation,
+    DocumentListResponse,
     DocumentMetadata,
     EngineInfo,
     Finding,
@@ -45,6 +48,7 @@ from backend.schemas import (  # noqa: E402
     Client,
     EngagementSummary,
     MeResponse,
+    EngagementStatsResponse,
 )
 from backend.accounting_store import (
     get_transactions,
@@ -81,7 +85,7 @@ from backend.payroll_rules import run_payroll_rules  # noqa: E402
 from backend.inventory_ingestion import parse_inventory_items_csv, parse_inventory_movements_csv  # noqa: E402
 from backend.inventory_rules import run_inventory_rules  # noqa: E402
 from backend.db import get_db, init_db  # noqa: E402
-from backend.db_models import ClientORM, EngagementORM, FindingORM  # noqa: E402
+from backend.db_models import ClientORM, DocumentLinkORM, DocumentORM, EngagementORM, FindingORM  # noqa: E402
 from backend.seed import seed_demo_data  # noqa: E402
 from backend.liabilities_ingestion import parse_ap_entries_csv, parse_loan_periods_csv, parse_loans_csv  # noqa: E402
 from backend.liabilities_rules import run_liabilities_rules  # noqa: E402
@@ -92,7 +96,8 @@ from backend.compliance_rules import run_compliance_rules  # noqa: E402
 from backend.books_schemas import GLIngestResponse, TrialBalanceIngestResponse  # noqa: E402
 from backend.findings_persistence import save_domain_findings  # noqa: E402
 from backend.engagement_stats import compute_engagement_stats  # noqa: E402
-from backend.schemas import EngagementStatsResponse  # noqa: E402
+from backend.docs_matching import match_document_to_bank_entries  # noqa: E402
+from backend.docs_rules import run_document_rules  # noqa: E402
 from fastapi.responses import HTMLResponse  # noqa: E402
 
 logger = logging.getLogger("taxops-api")
@@ -306,7 +311,7 @@ async def _process_audit_upload(
     base_doc_id = Path(file.filename or "upload").stem or f"doc-{uuid.uuid4().hex}"
     base_tax_year = int(tax_year) if tax_year else 0
     base_doc_type = doc_type or ""
-    metadata = DocumentMetadata(
+    metadata = AuditDocumentMetadata(
         filename=file.filename,
         content_type=file.content_type,
         pages=None,
@@ -406,7 +411,7 @@ async def _process_audit_upload(
         processed_at=processed_at,
         status="ok",
         summary=summary,
-        document_metadata=DocumentMetadata(
+        document_metadata=AuditDocumentMetadata(
             filename=metadata.filename or resolved_doc.get("meta", {}).get("source_file"),
             content_type=metadata.content_type,
             pages=resolved_doc.get("meta", {}).get("pages") if isinstance(resolved_doc.get("meta"), dict) else None,
@@ -674,6 +679,99 @@ async def bank_findings(engagement_id: str, db: Session = Depends(get_db)) -> Li
     findings = run_bank_rules(engagement_id)
     if findings:
         save_domain_findings(db, engagement_id, "bank", findings)
+    return findings
+
+
+@app.post("/api/docs/{engagement_id}/upload", response_model=DocumentMetadata)
+async def upload_document(
+    engagement_id: str,
+    file: UploadFile = File(...),
+    metadata: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Upload a single document with JSON metadata.
+    metadata is a JSON string containing:
+      - type (str)
+      - amount (optional float)
+      - date (optional YYYY-MM-DD)
+      - counterparty (optional)
+      - external_ref (optional)
+    """
+    try:
+        meta = json.loads(metadata)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid metadata JSON: {exc}") from exc
+
+    doc_type = (meta.get("type") or "").strip()
+    if not doc_type:
+        raise HTTPException(status_code=400, detail="Document type is required.")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty file.")
+
+    parsed_date = None
+    if meta.get("date"):
+        try:
+            parsed_date = datetime.strptime(meta["date"], "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid date format: {exc}") from exc
+
+    amount = meta.get("amount")
+    counterparty = meta.get("counterparty") or None
+    external_ref = meta.get("external_ref") or None
+
+    obj = DocumentORM(
+        engagement_id=str(engagement_id),
+        filename=file.filename,
+        content=raw,
+        type=doc_type,
+        amount=float(amount) if amount is not None else None,
+        date=parsed_date,
+        counterparty=counterparty,
+        external_ref=external_ref,
+        uploaded_by="demo",
+    )
+    db.add(obj)
+    db.flush()
+
+    match = match_document_to_bank_entries(engagement_id, obj)
+    if match:
+        domain, entry_id = match
+        link = DocumentLinkORM(
+            engagement_id=str(engagement_id),
+            domain=domain,
+            entry_id=entry_id,
+            doc_id=obj.id,
+        )
+        db.add(link)
+
+    db.commit()
+    db.refresh(obj)
+
+    return DocumentMetadata.from_orm(obj)
+
+
+@app.get("/api/docs/{engagement_id}", response_model=DocumentListResponse)
+async def list_documents(engagement_id: str, db: Session = Depends(get_db)):
+    docs = (
+        db.query(DocumentORM)
+        .filter(DocumentORM.engagement_id == str(engagement_id))
+        .order_by(DocumentORM.uploaded_at.desc())
+        .all()
+    )
+    return DocumentListResponse(documents=[DocumentMetadata.from_orm(d) for d in docs])
+
+
+@app.get("/api/docs/{engagement_id}/findings", response_model=List[DomainFinding])
+async def get_document_findings(
+    engagement_id: str,
+    db: Session = Depends(get_db),
+):
+    findings = run_document_rules(db, engagement_id)
+    if findings:
+        save_domain_findings(db, engagement_id, "documents", findings)
     return findings
 
 

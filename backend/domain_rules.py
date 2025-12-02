@@ -5,10 +5,24 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
+DomainLiteral = Literal[
+    "books",
+    "income",
+    "expense",
+    "bank",
+    "payroll",
+    "inventory",
+    "liabilities",
+    "assets",
+    "compliance",
+    "documents",
+]
+
+
 class DomainFinding(BaseModel):
     id: str
     engagement_id: str
-    domain: Literal["books", "income", "expense", "bank", "payroll", "inventory", "liabilities", "assets", "compliance"]
+    domain: DomainLiteral
     severity: Literal["low", "medium", "high", "critical"]
     code: str
     message: str
@@ -21,4 +35,4 @@ def make_finding_id(domain: str, code: str, idx: int) -> str:
     return f"f-{domain}-{code}-{idx}"
 
 
-__all__ = ["DomainFinding", "make_finding_id"]
+__all__ = ["DomainFinding", "DomainLiteral", "make_finding_id"]
