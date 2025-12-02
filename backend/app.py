@@ -49,12 +49,14 @@ from backend.schemas import (  # noqa: E402
     EngagementSummary,
     MeResponse,
     EngagementStatsResponse,
+    MeAuthResponse,
 )
 from backend.accounting_store import (
     get_transactions,
     get_trial_balance,
     save_transactions,
     save_trial_balance,
+    save_gl_entries,
     save_bank_entries,
     save_payroll_entries,
     save_payroll_employees,
@@ -73,6 +75,8 @@ from backend.books_ingestion import (  # noqa: E402
     parse_tb_rows_from_list,
     parse_transactions_from_csv,
     parse_transactions_from_rows,
+    parse_gl_entries_from_csv,
+    parse_gl_entries_from_rows,
 )
 from backend.bank_ingestion import parse_bank_csv  # noqa: E402
 from backend.bank_rules import run_bank_rules  # noqa: E402
@@ -98,6 +102,10 @@ from backend.findings_persistence import save_domain_findings  # noqa: E402
 from backend.engagement_stats import compute_engagement_stats  # noqa: E402
 from backend.docs_matching import match_document_to_bank_entries  # noqa: E402
 from backend.docs_rules import run_document_rules  # noqa: E402
+from backend.controls_rules import run_controls_rules  # noqa: E402
+from backend.deps import RequestContext, get_current_context  # noqa: E402
+from backend.routers import auth as auth_router  # noqa: E402
+from backend.security import decode_token  # noqa: E402
 from fastapi.responses import HTMLResponse  # noqa: E402
 
 logger = logging.getLogger("taxops-api")
@@ -150,6 +158,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth_router.router)
 
 
 @app.on_event("startup")
@@ -208,6 +218,13 @@ def verify_firebase_token(auth_header: Optional[str] = Header(None, alias="Autho
     if not auth_header or not auth_header.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header.")
     token = auth_header.split(" ", 1)[1]
+    # Try internal JWT first, fallback to Firebase verification for legacy clients.
+    try:
+        payload = decode_token(token)
+        if payload:
+            return payload
+    except Exception:
+        pass
     try:
         request = google_requests.Request()
         decoded = id_token.verify_firebase_token(token, request, audience=settings["firebase_project_id"])
@@ -217,6 +234,25 @@ def verify_firebase_token(auth_header: Optional[str] = Header(None, alias="Autho
     if not decoded:
         raise HTTPException(status_code=401, detail="Invalid token.")
     return decoded
+
+
+def _require_client_in_firm(db: Session, client_id: str, firm_id: str) -> ClientORM:
+    client = db.query(ClientORM).filter(ClientORM.id == client_id, ClientORM.firm_id == firm_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return client
+
+
+def _require_engagement_in_firm(db: Session, engagement_id: str, firm_id: str) -> EngagementORM:
+    engagement = (
+        db.query(EngagementORM)
+        .join(ClientORM, ClientORM.id == EngagementORM.client_id)
+        .filter(EngagementORM.id == engagement_id, ClientORM.firm_id == firm_id)
+        .first()
+    )
+    if not engagement:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    return engagement
 
 
 def _infer_source(content_type: Optional[str]) -> str:
@@ -450,15 +486,9 @@ async def firm_summary() -> FirmSummary:
     )
 
 
-@app.get("/auth/me", response_model=MeResponse)
-async def get_current_user() -> MeResponse:
-    """Stub auth endpoint that always returns a demo user."""
-    return MeResponse(user=DEMO_USER)
-
-
 @app.get("/api/clients", response_model=List[Client])
-async def list_clients(db: Session = Depends(get_db)) -> List[Client]:
-    clients = db.query(ClientORM).all()
+async def list_clients(ctx: RequestContext = Depends(get_current_context), db: Session = Depends(get_db)) -> List[Client]:
+    clients = db.query(ClientORM).filter(ClientORM.firm_id == ctx.firm.id).all()
     result: List[Client] = []
     for c in clients:
         engagements = db.query(EngagementORM).filter(EngagementORM.client_id == c.id).all()
@@ -494,10 +524,8 @@ async def list_clients(db: Session = Depends(get_db)) -> List[Client]:
 
 
 @app.get("/api/clients/{client_id}", response_model=Client)
-async def get_client(client_id: str, db: Session = Depends(get_db)) -> Client:
-    c = db.query(ClientORM).filter(ClientORM.id == client_id).first()
-    if not c:
-        raise HTTPException(status_code=404, detail="Client not found")
+async def get_client(client_id: str, ctx: RequestContext = Depends(get_current_context), db: Session = Depends(get_db)) -> Client:
+    c = _require_client_in_firm(db, client_id, ctx.firm.id)
     engagements = db.query(EngagementORM).filter(EngagementORM.client_id == c.id).all()
     return Client(
         id=c.id,
@@ -528,10 +556,10 @@ async def get_client(client_id: str, db: Session = Depends(get_db)) -> Client:
 
 
 @app.get("/api/clients/{client_id}/engagements", response_model=List[EngagementSummary])
-async def list_client_engagements(client_id: str, db: Session = Depends(get_db)) -> List[EngagementSummary]:
-    client = db.query(ClientORM).filter(ClientORM.id == client_id).first()
-    if not client:
-        raise HTTPException(status_code=404, detail="Client not found")
+async def list_client_engagements(
+    client_id: str, ctx: RequestContext = Depends(get_current_context), db: Session = Depends(get_db)
+) -> List[EngagementSummary]:
+    _require_client_in_firm(db, client_id, ctx.firm.id)
     engagements = db.query(EngagementORM).filter(EngagementORM.client_id == client_id).all()
     return [
         EngagementSummary(
@@ -596,12 +624,15 @@ async def ingest_general_ledger(
 ) -> GLIngestResponse:
     """Ingest general ledger CSV or JSON rows and group into transactions."""
     _ = user
+    gl_entries = []
     try:
         if file:
             content = await file.read()
             if not content:
                 raise ValueError("Empty file uploaded.")
-            txns = parse_transactions_from_csv(content.decode("utf-8"))
+            decoded = content.decode("utf-8")
+            txns = parse_transactions_from_csv(decoded)
+            gl_entries = parse_gl_entries_from_csv(decoded)
         else:
             try:
                 body = await request.json()
@@ -609,14 +640,18 @@ async def ingest_general_ledger(
                 body = None
             if isinstance(body, list):
                 txns = parse_transactions_from_rows(body)
+                gl_entries = parse_gl_entries_from_rows(body)
             elif isinstance(body, dict) and "rows" in body:
-                txns = parse_transactions_from_rows(body.get("rows") or [])
+                rows = body.get("rows") or []
+                txns = parse_transactions_from_rows(rows)
+                gl_entries = parse_gl_entries_from_rows(rows)
             else:
                 raise ValueError("Provide a CSV file or JSON payload with rows.")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     save_transactions(engagement_id, txns)
+    save_gl_entries(engagement_id, gl_entries)
     total_debit = sum((line.debit for txn in txns for line in txn.lines), Decimal("0"))
     total_credit = sum((line.credit for txn in txns for line in txn.lines), Decimal("0"))
     return GLIngestResponse(transactions_ingested=len(txns), total_debit=total_debit, total_credit=total_credit)
@@ -772,6 +807,17 @@ async def get_document_findings(
     findings = run_document_rules(db, engagement_id)
     if findings:
         save_domain_findings(db, engagement_id, "documents", findings)
+    return findings
+
+
+@app.get("/api/controls/{engagement_id}/findings", response_model=List[DomainFinding])
+async def get_controls_findings(
+    engagement_id: str,
+    db: Session = Depends(get_db),
+) -> List[DomainFinding]:
+    findings = run_controls_rules(engagement_id)
+    if findings:
+        save_domain_findings(db, engagement_id, "controls", findings)
     return findings
 
 
@@ -983,16 +1029,23 @@ async def assets_findings(engagement_id: str, db: Session = Depends(get_db)) -> 
 
 
 @app.get("/api/engagements/{engagement_id}/stats", response_model=EngagementStatsResponse)
-async def engagement_stats(engagement_id: str, db: Session = Depends(get_db)) -> EngagementStatsResponse:
-    engagement = db.query(EngagementORM).filter(EngagementORM.id == engagement_id).first()
-    if not engagement:
-        raise HTTPException(status_code=404, detail="Engagement not found")
+async def engagement_stats(
+    engagement_id: str,
+    db: Session = Depends(get_db),
+    ctx: RequestContext = Depends(get_current_context),
+) -> EngagementStatsResponse:
+    _require_engagement_in_firm(db, engagement_id, ctx.firm.id)
     return compute_engagement_stats(db, engagement_id)
 
 
 @app.get("/api/engagements/{engagement_id}/findings", response_model=List[DomainFinding])
-async def engagement_findings(engagement_id: str, db: Session = Depends(get_db)) -> List[DomainFinding]:
+async def engagement_findings(
+    engagement_id: str,
+    db: Session = Depends(get_db),
+    ctx: RequestContext = Depends(get_current_context),
+) -> List[DomainFinding]:
     """Return all persisted findings for an engagement across domains."""
+    _require_engagement_in_firm(db, engagement_id, ctx.firm.id)
     rows = (
         db.query(FindingORM)
         .filter(FindingORM.engagement_id == engagement_id)

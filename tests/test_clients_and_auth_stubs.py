@@ -15,6 +15,7 @@ client = TestClient(app_module.app)
 
 
 def setup_module():
+    os.environ["AUTH_BYPASS"] = "true"
     init_db()
     seed_demo_data()
 

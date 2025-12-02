@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, time as dt_time
+from datetime import date, datetime, time as dt_time
 from decimal import Decimal
 from typing import Dict, List, Literal, Optional
 
@@ -42,6 +42,10 @@ class Transaction(BaseModel):
     counterparty_id: Optional[str] = None
     source: Optional[str] = None  # e.g. "GL", "manual_journal"
     posted_by: Optional[str] = None
+    user_id: Optional[str] = None
+    approved_by: Optional[str] = None
+    posted_at: Optional[datetime] = None
+    approved_at: Optional[datetime] = None
 
 
 class TrialBalanceRow(BaseModel):
@@ -191,6 +195,23 @@ class BooksTaxRow(BaseModel):
     turnover_books: Decimal
 
 
+class GLEntry(BaseModel):
+    """Flat general ledger entry (one line) with control attributes."""
+
+    id: str
+    account: str
+    date: date
+    description: str
+    amount: Decimal
+    debit: Decimal
+    credit: Decimal
+    user_id: Optional[str] = None
+    approved_by: Optional[str] = None
+    posted_at: Optional[datetime] = None
+    approved_at: Optional[datetime] = None
+    source: Optional[str] = None
+
+
 __all__ = [
     "Account",
     "Counterparty",
@@ -209,4 +230,5 @@ __all__ = [
     "DepreciationEntry",
     "TaxReturnRow",
     "BooksTaxRow",
+    "GLEntry",
 ]

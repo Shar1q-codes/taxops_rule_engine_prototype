@@ -14,10 +14,44 @@ def _uuid_str() -> str:
     return str(uuid.uuid4())
 
 
+class FirmORM(Base):
+    __tablename__ = "firms"
+
+    id = Column(String, primary_key=True, default=_uuid_str)
+    name = Column(String, nullable=False)
+    slug = Column(String, nullable=True, unique=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class UserORM(Base):
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True, default=_uuid_str)
+    email = Column(String, nullable=False, unique=True, index=True)
+    hashed_password = Column(String, nullable=False)
+    full_name = Column(String, nullable=True)
+    is_active = Column(Integer, nullable=False, default=1)
+    is_superuser = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class FirmMembershipORM(Base):
+    __tablename__ = "firm_memberships"
+
+    id = Column(String, primary_key=True, default=_uuid_str)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    firm_id = Column(String, ForeignKey("firms.id"), nullable=False, index=True)
+    role = Column(String, nullable=False, default="owner")
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class ClientORM(Base):
     __tablename__ = "clients"
 
     id = Column(String, primary_key=True, default=_uuid_str)
+    firm_id = Column(String, ForeignKey("firms.id"), nullable=True, index=True)
     name = Column(String, nullable=False)
     code = Column(String, nullable=True)
     status = Column(String, nullable=False, default="active")

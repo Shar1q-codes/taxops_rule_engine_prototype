@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class Citation(BaseModel):
@@ -152,3 +152,53 @@ class DocumentMetadata(BaseModel):
 
 class DocumentListResponse(BaseModel):
     documents: List[DocumentMetadata]
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class TokenPayload(BaseModel):
+    sub: Optional[str] = None
+    firm_id: Optional[str] = None
+    exp: Optional[int] = None
+
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: Optional[str] = None
+
+
+class UserRead(BaseModel):
+    id: str
+    email: str
+    full_name: Optional[str] = None
+    is_active: bool
+
+
+class FirmCreate(BaseModel):
+    name: str
+
+
+class FirmRead(BaseModel):
+    id: str
+    name: str
+
+
+class RegisterFirmRequest(BaseModel):
+    firm: FirmCreate
+    user: UserCreate
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+    firm_id: Optional[str] = None
+
+
+class MeAuthResponse(BaseModel):
+    user: UserRead
+    firm: FirmRead
+    roles: List[str] = Field(default_factory=list)

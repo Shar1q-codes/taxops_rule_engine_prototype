@@ -17,6 +17,7 @@ from backend.accounting_models import (
     PayrollEntry,
     TrialBalanceRow,
     Transaction,
+    GLEntry,
 )
 
 # Simple in-memory store keyed by engagement id. Replace with a real DB later.
@@ -37,6 +38,7 @@ _ASSETS: Dict[str, List[FixedAsset]] = {}
 _ASSET_DEPRECIATION: Dict[str, List[DepreciationEntry]] = {}
 _COMPLIANCE_RETURNS: Dict[str, List[TaxReturnRow]] = {}
 _COMPLIANCE_BOOKS: Dict[str, List[BooksTaxRow]] = {}
+_GL_ENTRIES: Dict[str, List[GLEntry]] = {}
 
 
 def save_trial_balance(engagement_id: str, rows: List[TrialBalanceRow]) -> None:
@@ -53,6 +55,14 @@ def get_trial_balance(engagement_id: str) -> List[TrialBalanceRow]:
 
 def get_transactions(engagement_id: str) -> List[Transaction]:
     return _store["transactions"].get(engagement_id, [])
+
+
+def save_gl_entries(engagement_id: str, entries: List[GLEntry]) -> None:
+    _GL_ENTRIES[engagement_id] = entries
+
+
+def get_gl_entries(engagement_id: str) -> List[GLEntry]:
+    return _GL_ENTRIES.get(engagement_id, [])
 
 
 def save_bank_entries(engagement_id: str, entries: List[BankEntry]) -> None:
@@ -167,3 +177,4 @@ def clear_engagement(engagement_id: str) -> None:
     _ASSET_DEPRECIATION.pop(engagement_id, None)
     _COMPLIANCE_RETURNS.pop(engagement_id, None)
     _COMPLIANCE_BOOKS.pop(engagement_id, None)
+    _GL_ENTRIES.pop(engagement_id, None)

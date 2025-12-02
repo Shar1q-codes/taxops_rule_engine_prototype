@@ -29,3 +29,10 @@ def init_db() -> None:
     from backend import db_models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+
+    # Lightweight migration for legacy SQLite files to add firm_id to clients.
+    if engine.dialect.name == "sqlite":
+        with engine.connect() as conn:
+            cols = [row[1] for row in conn.exec_driver_sql("PRAGMA table_info('clients')")]
+            if "firm_id" not in cols:
+                conn.exec_driver_sql("ALTER TABLE clients ADD COLUMN firm_id VARCHAR")

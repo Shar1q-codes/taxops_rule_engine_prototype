@@ -16,6 +16,7 @@ DomainLiteral = Literal[
     "assets",
     "compliance",
     "documents",
+    "controls",
 ]
 
 
