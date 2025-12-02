@@ -148,6 +148,49 @@ class APEntry(BaseModel):
     payment_date: Optional[date] = None
 
 
+class FixedAsset(BaseModel):
+    """Fixed asset register entry."""
+
+    id: str
+    asset_code: str
+    description: str
+    category: str
+    acquisition_date: date
+    acquisition_cost: Decimal
+    useful_life_years: Decimal
+    disposal_date: Optional[date] = None
+
+
+class DepreciationEntry(BaseModel):
+    """Depreciation schedule entry."""
+
+    id: str
+    asset_code: str
+    period_end: date
+    depreciation_expense: Decimal
+    accumulated_depreciation: Decimal
+    net_book_value: Decimal
+
+
+class TaxReturnRow(BaseModel):
+    """Tax return summary per period/type."""
+
+    period: str
+    tax_type: str
+    turnover_return: Decimal
+    tax_paid: Decimal
+    filing_date: date
+    due_date: date
+
+
+class BooksTaxRow(BaseModel):
+    """Books turnover per tax type/period."""
+
+    period: str
+    tax_type: str
+    turnover_books: Decimal
+
+
 __all__ = [
     "Account",
     "Counterparty",
@@ -162,4 +205,8 @@ __all__ = [
     "LoanAccount",
     "LoanPeriodEntry",
     "APEntry",
+    "FixedAsset",
+    "DepreciationEntry",
+    "TaxReturnRow",
+    "BooksTaxRow",
 ]

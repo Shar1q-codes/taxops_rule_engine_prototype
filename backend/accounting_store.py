@@ -5,6 +5,10 @@ from typing import Dict, List
 from backend.accounting_models import (
     BankEntry,
     APEntry,
+    DepreciationEntry,
+    FixedAsset,
+    BooksTaxRow,
+    TaxReturnRow,
     InventoryItem,
     InventoryMovement,
     LoanAccount,
@@ -29,6 +33,10 @@ _INVENTORY_MOVEMENTS: Dict[str, List[InventoryMovement]] = {}
 _LOANS: Dict[str, List[LoanAccount]] = {}
 _LOAN_PERIODS: Dict[str, List[LoanPeriodEntry]] = {}
 _AP_ENTRIES: Dict[str, List[APEntry]] = {}
+_ASSETS: Dict[str, List[FixedAsset]] = {}
+_ASSET_DEPRECIATION: Dict[str, List[DepreciationEntry]] = {}
+_COMPLIANCE_RETURNS: Dict[str, List[TaxReturnRow]] = {}
+_COMPLIANCE_BOOKS: Dict[str, List[BooksTaxRow]] = {}
 
 
 def save_trial_balance(engagement_id: str, rows: List[TrialBalanceRow]) -> None:
@@ -111,6 +119,38 @@ def get_ap_entries(engagement_id: str) -> List[APEntry]:
     return _AP_ENTRIES.get(engagement_id, [])
 
 
+def save_assets(engagement_id: str, assets: List[FixedAsset]) -> None:
+    _ASSETS[engagement_id] = assets
+
+
+def get_assets(engagement_id: str) -> List[FixedAsset]:
+    return _ASSETS.get(engagement_id, [])
+
+
+def save_depreciation_entries(engagement_id: str, entries: List[DepreciationEntry]) -> None:
+    _ASSET_DEPRECIATION[engagement_id] = entries
+
+
+def get_depreciation_entries(engagement_id: str) -> List[DepreciationEntry]:
+    return _ASSET_DEPRECIATION.get(engagement_id, [])
+
+
+def save_tax_returns(engagement_id: str, rows: List[TaxReturnRow]) -> None:
+    _COMPLIANCE_RETURNS[engagement_id] = rows
+
+
+def get_tax_returns(engagement_id: str) -> List[TaxReturnRow]:
+    return _COMPLIANCE_RETURNS.get(engagement_id, [])
+
+
+def save_books_tax(engagement_id: str, rows: List[BooksTaxRow]) -> None:
+    _COMPLIANCE_BOOKS[engagement_id] = rows
+
+
+def get_books_tax(engagement_id: str) -> List[BooksTaxRow]:
+    return _COMPLIANCE_BOOKS.get(engagement_id, [])
+
+
 def clear_engagement(engagement_id: str) -> None:
     """Test helper to drop any cached rows for an engagement."""
     _store["trial_balances"].pop(engagement_id, None)
@@ -123,3 +163,7 @@ def clear_engagement(engagement_id: str) -> None:
     _LOANS.pop(engagement_id, None)
     _LOAN_PERIODS.pop(engagement_id, None)
     _AP_ENTRIES.pop(engagement_id, None)
+    _ASSETS.pop(engagement_id, None)
+    _ASSET_DEPRECIATION.pop(engagement_id, None)
+    _COMPLIANCE_RETURNS.pop(engagement_id, None)
+    _COMPLIANCE_BOOKS.pop(engagement_id, None)

@@ -59,6 +59,10 @@ from backend.accounting_store import (
     save_loans,
     save_loan_periods,
     save_ap_entries,
+    save_assets,
+    save_depreciation_entries,
+    save_tax_returns,
+    save_books_tax,
 )  # noqa: E402
 from backend.books_ingestion import (  # noqa: E402
     parse_tb_rows_from_csv,
@@ -81,6 +85,10 @@ from backend.db_models import ClientORM, EngagementORM, FindingORM  # noqa: E402
 from backend.seed import seed_demo_data  # noqa: E402
 from backend.liabilities_ingestion import parse_ap_entries_csv, parse_loan_periods_csv, parse_loans_csv  # noqa: E402
 from backend.liabilities_rules import run_liabilities_rules  # noqa: E402
+from backend.assets_ingestion import parse_assets_csv, parse_depreciation_csv  # noqa: E402
+from backend.assets_rules import run_assets_rules  # noqa: E402
+from backend.compliance_ingestion import parse_books_tax_csv, parse_returns_csv  # noqa: E402
+from backend.compliance_rules import run_compliance_rules  # noqa: E402
 from backend.books_schemas import GLIngestResponse, TrialBalanceIngestResponse  # noqa: E402
 from backend.findings_persistence import save_domain_findings  # noqa: E402
 from backend.engagement_stats import compute_engagement_stats  # noqa: E402
@@ -829,6 +837,53 @@ async def liabilities_findings(engagement_id: str, db: Session = Depends(get_db)
     return findings
 
 
+@app.post("/api/assets/{engagement_id}/register")
+async def upload_assets_register(
+    engagement_id: str,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> Dict[str, Any]:
+    """Upload fixed asset register CSV."""
+    _ = user
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV asset register is supported in this prototype.")
+    content = await file.read()
+    try:
+        assets = parse_assets_csv(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse asset register CSV: {exc}") from exc
+    save_assets(engagement_id, assets)
+    return {"engagement_id": engagement_id, "assets": len(assets)}
+
+
+@app.post("/api/assets/{engagement_id}/depreciation")
+async def upload_assets_depreciation(
+    engagement_id: str,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> Dict[str, Any]:
+    """Upload asset depreciation schedule CSV."""
+    _ = user
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV depreciation file is supported in this prototype.")
+    content = await file.read()
+    try:
+        entries = parse_depreciation_csv(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse depreciation CSV: {exc}") from exc
+    save_depreciation_entries(engagement_id, entries)
+    return {"engagement_id": engagement_id, "entries": len(entries)}
+
+
+@app.get("/api/assets/{engagement_id}/findings", response_model=List[DomainFinding])
+async def assets_findings(engagement_id: str, db: Session = Depends(get_db)) -> List[DomainFinding]:
+    """Run assets domain rules."""
+    findings = run_assets_rules(engagement_id)
+    if findings:
+        save_domain_findings(db, engagement_id, "assets", findings)
+    return findings
+
+
 @app.get("/api/engagements/{engagement_id}/stats", response_model=EngagementStatsResponse)
 async def engagement_stats(engagement_id: str, db: Session = Depends(get_db)) -> EngagementStatsResponse:
     engagement = db.query(EngagementORM).filter(EngagementORM.id == engagement_id).first()
@@ -858,6 +913,53 @@ async def engagement_findings(engagement_id: str, db: Session = Depends(get_db))
         )
         for r in rows
     ]
+
+
+@app.post("/api/compliance/{engagement_id}/returns")
+async def upload_compliance_returns(
+    engagement_id: str,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> Dict[str, Any]:
+    """Upload tax returns summary CSV."""
+    _ = user
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV returns file is supported in this prototype.")
+    content = await file.read()
+    try:
+        rows = parse_returns_csv(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse returns CSV: {exc}") from exc
+    save_tax_returns(engagement_id, rows)
+    return {"engagement_id": engagement_id, "rows": len(rows)}
+
+
+@app.post("/api/compliance/{engagement_id}/books")
+async def upload_compliance_books(
+    engagement_id: str,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(verify_firebase_token),
+) -> Dict[str, Any]:
+    """Upload books turnover CSV for tax types."""
+    _ = user
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV books tax export is supported in this prototype.")
+    content = await file.read()
+    try:
+        rows = parse_books_tax_csv(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse books tax CSV: {exc}") from exc
+    save_books_tax(engagement_id, rows)
+    return {"engagement_id": engagement_id, "rows": len(rows)}
+
+
+@app.get("/api/compliance/{engagement_id}/findings", response_model=List[DomainFinding])
+async def compliance_findings(engagement_id: str, db: Session = Depends(get_db)) -> List[DomainFinding]:
+    """Run compliance reconciliation rules."""
+    findings = run_compliance_rules(engagement_id)
+    if findings:
+        save_domain_findings(db, engagement_id, "compliance", findings)
+    return findings
 
 
 @app.get("/api/engagements/{engagement_id}/findings", response_model=List[DomainFinding])
