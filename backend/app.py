@@ -421,18 +421,14 @@ async def root() -> Dict[str, str]:
 
 
 @app.get("/api/firm/info", response_model=FirmInfo)
-async def firm_info(user: Dict[str, Any] = Depends(verify_firebase_token)) -> FirmInfo:
-    """Return firm metadata for the authenticated user."""
-    firm_id = user.get("firm_id") or user.get("firmId") or "firm-demo"
-    firm_name = user.get("firm_name") or user.get("firmName") or "TaxOps Firm"
-    logo_url = user.get("firm_logo_url") or user.get("firmLogoUrl")
-    return FirmInfo(id=str(firm_id), name=str(firm_name), logo_url=logo_url)
+async def firm_info() -> FirmInfo:
+    """Return demo firm metadata without requiring auth."""
+    return FirmInfo(id="firm-demo", name="TaxOps Firm", logo_url=None)
 
 
 @app.get("/api/firm/summary", response_model=FirmSummary)
-async def firm_summary(user: Dict[str, Any] = Depends(verify_firebase_token)) -> FirmSummary:
-    """Return simple firm-level dashboard counts. Replace with real data source when available."""
-    _ = user  # token validation already performed
+async def firm_summary() -> FirmSummary:
+    """Return simple firm-level dashboard counts."""
     return FirmSummary(
         totalClients=10,
         activeEngagements=5,
