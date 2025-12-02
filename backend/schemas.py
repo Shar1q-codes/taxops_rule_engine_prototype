@@ -202,3 +202,18 @@ class MeAuthResponse(BaseModel):
     user: UserRead
     firm: FirmRead
     roles: List[str] = Field(default_factory=list)
+
+
+class DomainRiskSummary(BaseModel):
+    domain: str
+    score: int
+    total_findings: int
+    by_severity: Dict[str, int]
+
+
+class EngagementRiskSummary(BaseModel):
+    engagement_id: str
+    overall_score: int
+    total_findings: int
+    by_severity: Dict[str, int]
+    domains: List[DomainRiskSummary]

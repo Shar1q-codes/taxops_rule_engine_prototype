@@ -106,6 +106,8 @@ from backend.controls_rules import run_controls_rules  # noqa: E402
 from backend.deps import RequestContext, get_current_context  # noqa: E402
 from backend.routers import auth as auth_router  # noqa: E402
 from backend.security import decode_token  # noqa: E402
+from backend.risk_summary import compute_engagement_risk_summary  # noqa: E402
+from backend.schemas import EngagementRiskSummary  # noqa: E402
 from fastapi.responses import HTMLResponse  # noqa: E402
 
 logger = logging.getLogger("taxops-api")
@@ -1064,6 +1066,23 @@ async def engagement_findings(
         )
         for r in rows
     ]
+
+
+@app.get("/api/engagements/{engagement_id}/risk-summary", response_model=EngagementRiskSummary)
+async def engagement_risk_summary(
+    engagement_id: str,
+    db: Session = Depends(get_db),
+    ctx: RequestContext = Depends(get_current_context),
+) -> EngagementRiskSummary:
+    engagement = (
+        db.query(EngagementORM)
+        .join(ClientORM, ClientORM.id == EngagementORM.client_id)
+        .filter(EngagementORM.id == engagement_id, ClientORM.firm_id == ctx.firm.id)
+        .one_or_none()
+    )
+    if not engagement:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    return compute_engagement_risk_summary(db, engagement)
 
 
 @app.post("/api/compliance/{engagement_id}/returns")
