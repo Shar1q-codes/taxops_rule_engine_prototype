@@ -12,3 +12,4 @@ PyYAML==6.0.2
 SQLAlchemy==2.0.30
 python-jose==3.3.0
 passlib[bcrypt]==1.7.4
+email-validator>=2.0.0
